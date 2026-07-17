@@ -1,0 +1,16 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+backend/data/
+backend/service-account.json
+backend/secrets/*.json
+!backend/secrets/.gitkeep
+node_modules/
+extension/node_modules/
+extension/coverage/
+.idea/
+.vscode/

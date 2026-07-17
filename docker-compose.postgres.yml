@@ -1,0 +1,33 @@
+services:
+  api:
+    environment:
+      DATABASE_URL: postgresql+psycopg://auto_zalo:${POSTGRES_PASSWORD}@db:5432/auto_zalo
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    environment:
+      DATABASE_URL: postgresql+psycopg://auto_zalo:${POSTGRES_PASSWORD}@db:5432/auto_zalo
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: auto_zalo
+      POSTGRES_USER: auto_zalo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - auto-zalo-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auto_zalo -d auto_zalo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  auto-zalo-postgres:
+

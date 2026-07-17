@@ -1,0 +1,11 @@
+.git
+**/.git
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+backend/data
+backend/secrets
+zalo-api-final/src
+zalo-api-final/test
+zalo-api-final/docs

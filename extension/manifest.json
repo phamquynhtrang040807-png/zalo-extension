@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "TikTok Shop → Sheets & Zalo",
+  "version": "0.1.0",
+  "description": "Thu thập hồ sơ nhà sáng tạo TikTok Shop và chuyển tới Auto Zalo backend.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*",
+    "https://*.tiktok.com/*",
+    "https://*.tiktokglobalshop.com/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.tiktok.com/*",
+        "https://*.tiktokglobalshop.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Cấu hình Auto Zalo"
+  }
+}
+

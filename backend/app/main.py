@@ -1,0 +1,307 @@
+from contextlib import asynccontextmanager
+from html import escape
+
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.responses import HTMLResponse
+from sqlalchemy import select, text
+from sqlalchemy.orm import Session
+
+from app.auth import require_api_token
+from app.config import get_settings
+from app.db import get_db, init_db
+from app.models import Lead, StepStatus, TaskType
+from app.normalization import (
+    normalize_followers,
+    normalize_gmv,
+    normalize_username,
+    normalize_vietnam_phone,
+)
+from app.outbox import enqueue_task
+from app.schemas import (
+    CaptureRequest,
+    CaptureResponse,
+    GoogleAuthStartResponse,
+    GoogleSheetsTestRequest,
+    GoogleSheetsTestResponse,
+    JobResponse,
+    NormalizedCapture,
+    ZaloControlRequest,
+    ZaloControlResponse,
+)
+from app.services.runtime import is_zalo_paused, set_zalo_paused
+from app.services.google_oauth import complete_authorization, create_authorization_url
+from app.services.sheets import GoogleSheetsAdapter
+from app.services.zalo import ZaloAdapter
+from app.services.zalo_bridge import PersonalZaloBridge, ZaloBridgeError
+
+
+settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="Auto Zalo API", version="0.1.0", lifespan=lifespan)
+
+
+@app.get("/health")
+def health(db: Session = Depends(get_db)) -> dict[str, object]:
+    database_ok = True
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception:
+        database_ok = False
+    sheets = GoogleSheetsAdapter(settings)
+    zalo = ZaloAdapter(settings)
+    return {
+        "status": "ok" if database_ok else "degraded",
+        "database": database_ok,
+        "google_sheets_configured": sheets.configured,
+        "google_auth_mode": settings.google_auth_mode,
+        "google_credentials_ready": sheets.auth_configured,
+        "zalo_configured": zalo.configured,
+        "zalo_enabled": settings.zalo_enabled,
+        "zalo_dry_run": settings.dry_run,
+        "zalo_force_recipient_enabled": settings.zalo_force_recipient_enabled,
+        "zalo_paused": is_zalo_paused(db),
+    }
+
+
+@app.post(
+    "/v1/integrations/google/start",
+    response_model=GoogleAuthStartResponse,
+    dependencies=[Depends(require_api_token)],
+)
+def start_google_oauth(db: Session = Depends(get_db)) -> GoogleAuthStartResponse:
+    if settings.google_auth_mode.lower() != "oauth":
+        raise HTTPException(
+            status_code=409,
+            detail="GOOGLE_AUTH_MODE phải là oauth để dùng luồng cấp quyền này",
+        )
+    try:
+        authorization_url = create_authorization_url(db, settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return GoogleAuthStartResponse(
+        authorization_url=authorization_url,
+        redirect_uri=settings.google_oauth_redirect_uri,
+    )
+
+
+@app.get("/v1/integrations/google/callback", response_class=HTMLResponse)
+def google_oauth_callback(
+    state: str = Query(...),
+    code: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    if error:
+        return HTMLResponse(
+            f"<h1>Kết nối Google thất bại</h1><p>{escape(error)}</p>", status_code=400
+        )
+    if not code:
+        return HTMLResponse("<h1>Thiếu authorization code</h1>", status_code=400)
+    try:
+        complete_authorization(db, settings, state, code)
+    except Exception as exc:
+        return HTMLResponse(
+            f"<h1>Kết nối Google thất bại</h1><p>{escape(str(exc))}</p>",
+            status_code=400,
+        )
+    return HTMLResponse(
+        "<h1>Kết nối Google thành công</h1>"
+        "<p>Bạn có thể đóng tab này và quay lại Extension Options để kiểm tra Sheet.</p>"
+    )
+
+
+@app.post(
+    "/v1/integrations/google-sheets/test",
+    response_model=GoogleSheetsTestResponse,
+    dependencies=[Depends(require_api_token)],
+)
+def test_google_sheet(
+    payload: GoogleSheetsTestRequest, db: Session = Depends(get_db)
+) -> GoogleSheetsTestResponse:
+    del db  # dependency ensures a healthy request context; adapter uses Google directly.
+    adapter = GoogleSheetsAdapter(settings)
+    try:
+        result = adapter.diagnose(write_test=payload.write_test)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return GoogleSheetsTestResponse(
+        connected=result.connected,
+        auth_mode=settings.google_auth_mode,
+        spreadsheet_id=settings.google_spreadsheet_id,
+        spreadsheet_title=result.spreadsheet_title,
+        target_sheet_name=result.target_sheet_name,
+        target_sheet_found=result.target_sheet_found,
+        available_sheets=result.available_sheets,
+        read_ok=result.read_ok,
+        write_ok=result.write_ok,
+        message=result.message,
+    )
+
+
+@app.post(
+    "/v1/captures",
+    response_model=CaptureResponse,
+    dependencies=[Depends(require_api_token)],
+)
+def capture(payload: CaptureRequest, db: Session = Depends(get_db)) -> CaptureResponse:
+    followers = normalize_followers(payload.followers_raw)
+    gmv_vnd = normalize_gmv(payload.gmv_raw)
+    phone = normalize_vietnam_phone(payload.phone_raw)
+    has_zalo_value = bool(payload.phone_raw and payload.phone_raw.strip())
+    normalized = NormalizedCapture(
+        followers=followers,
+        gmv_vnd=gmv_vnd,
+        phone_local=phone.local if phone else None,
+        phone_e164=phone.e164 if phone else None,
+    )
+    username = normalize_username(payload.username)
+    profile_key = f"id:{payload.profile_id}" if payload.profile_id else f"username:{username}"
+    lead = db.scalar(select(Lead).where(Lead.profile_key == profile_key))
+    is_new = lead is None
+    if lead is None:
+        lead = Lead(
+            profile_key=profile_key,
+            username=username,
+            profile_url=str(payload.profile_url),
+            gmv_raw=payload.gmv_raw,
+            gmv_vnd=gmv_vnd or 0,
+            captured_at=payload.captured_at,
+        )
+        db.add(lead)
+        db.flush()
+
+    lead.profile_id = payload.profile_id
+    lead.username = username
+    lead.display_name = payload.display_name
+    lead.profile_url = str(payload.profile_url)
+    lead.reporting_period = payload.reporting_period
+    lead.followers_raw = payload.followers_raw
+    lead.followers = followers
+    lead.gmv_raw = payload.gmv_raw
+    lead.gmv_vnd = gmv_vnd or 0
+    lead.phone_raw = payload.phone_raw
+    lead.phone_local = phone.local if phone else None
+    lead.phone_e164 = phone.e164 if phone else None
+    lead.captured_at = payload.captured_at
+    lead.last_error = None
+    lead.sheet_status = StepStatus.pending.value
+
+    if not has_zalo_value:
+        if lead.zalo_invite_status != StepStatus.completed.value:
+            lead.zalo_invite_status = StepStatus.missing_phone.value
+        if lead.zalo_message_status != StepStatus.completed.value:
+            lead.zalo_message_status = StepStatus.missing_phone.value
+        enqueue_task(db, lead.id, TaskType.sheet_sync)
+        db.commit()
+        return CaptureResponse(
+            action="saved_missing_phone",
+            lead_id=lead.id,
+            job_id=lead.id,
+            message="Đã lưu hồ sơ đủ GMV nhưng thiếu SĐT hợp lệ",
+            normalized=normalized,
+        )
+
+    already_completed = (
+        lead.zalo_invite_status == StepStatus.completed.value
+        and lead.zalo_message_status == StepStatus.completed.value
+    )
+    enqueue_task(db, lead.id, TaskType.sheet_sync)
+    if not already_completed:
+        if lead.zalo_invite_status != StepStatus.completed.value:
+            lead.zalo_invite_status = StepStatus.pending.value
+            enqueue_task(db, lead.id, TaskType.zalo_invite)
+        elif lead.zalo_message_status != StepStatus.completed.value:
+            lead.zalo_message_status = StepStatus.pending.value
+            enqueue_task(db, lead.id, TaskType.zalo_message)
+    db.commit()
+
+    return CaptureResponse(
+        action="duplicate_completed" if already_completed and not is_new else "queued",
+        lead_id=lead.id,
+        job_id=lead.id,
+        message=(
+            "Đã cập nhật dữ liệu; Zalo đã hoàn tất trước đó nên không gửi lại"
+            if already_completed
+            else "Đã đưa hồ sơ vào hàng đợi xử lý"
+        ),
+        normalized=normalized,
+    )
+
+
+@app.get(
+    "/v1/jobs/{job_id}",
+    response_model=JobResponse,
+    dependencies=[Depends(require_api_token)],
+)
+def get_job(job_id: str, db: Session = Depends(get_db)) -> JobResponse:
+    lead = db.get(Lead, job_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return JobResponse(
+        job_id=lead.id,
+        profile_key=lead.profile_key,
+        username=lead.username,
+        sheet_status=lead.sheet_status,
+        zalo_invite_status=lead.zalo_invite_status,
+        zalo_message_status=lead.zalo_message_status,
+        last_error=lead.last_error,
+        updated_at=lead.updated_at,
+    )
+
+
+@app.post(
+    "/v1/control/zalo",
+    response_model=ZaloControlResponse,
+    dependencies=[Depends(require_api_token)],
+)
+def control_zalo(payload: ZaloControlRequest, db: Session = Depends(get_db)) -> ZaloControlResponse:
+    set_zalo_paused(db, not payload.enabled)
+    return ZaloControlResponse(enabled=payload.enabled, paused=not payload.enabled)
+
+
+def _personal_zalo_bridge() -> PersonalZaloBridge:
+    return PersonalZaloBridge(settings)
+
+
+def _bridge_http_error(exc: ZaloBridgeError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail=str(exc))
+
+
+@app.get(
+    "/v1/integrations/zalo/status",
+    dependencies=[Depends(require_api_token)],
+)
+def personal_zalo_status() -> dict[str, object]:
+    try:
+        return _personal_zalo_bridge().status()
+    except ZaloBridgeError as exc:
+        raise _bridge_http_error(exc) from exc
+
+
+@app.post(
+    "/v1/integrations/zalo/login/qr",
+    dependencies=[Depends(require_api_token)],
+)
+def personal_zalo_start_qr_login() -> dict[str, object]:
+    try:
+        return _personal_zalo_bridge().start_qr_login()
+    except ZaloBridgeError as exc:
+        raise _bridge_http_error(exc) from exc
+
+
+@app.get(
+    "/v1/integrations/zalo/login/qr",
+    dependencies=[Depends(require_api_token)],
+)
+def personal_zalo_qr_image() -> dict[str, str]:
+    try:
+        return _personal_zalo_bridge().qr_image()
+    except ZaloBridgeError as exc:
+        raise _bridge_http_error(exc) from exc

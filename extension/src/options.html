@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Cấu hình Auto Zalo</title>
+    <style>
+      body{font:15px/1.5 system-ui,sans-serif;max-width:680px;margin:36px auto;padding:0 20px;color:#17202a}
+      h1{font-size:24px} label{display:block;font-weight:600;margin-top:18px}
+      input{box-sizing:border-box;width:100%;margin-top:6px;padding:10px;border:1px solid #bbb;border-radius:8px}
+      button{margin:20px 8px 0 0;padding:10px 14px;border:0;border-radius:8px;background:#007f7a;color:white;cursor:pointer}
+      button.secondary{background:#475569} button.danger{background:#b91c1c}
+      #status{margin-top:18px;white-space:pre-wrap;padding:12px;border-radius:8px;background:#f1f5f9;min-height:24px}
+      .zalo-card{margin-top:24px;padding:18px;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc}
+      .zalo-card h2{margin:0 0 8px;font-size:19px}.zalo-card p{margin:8px 0}
+      #zaloQr{display:none;width:280px;height:280px;object-fit:contain;margin:16px auto;border:1px solid #cbd5e1;border-radius:12px;background:white}
+      #zaloLoginStatus.ok{color:#08783e;font-weight:650}#zaloLoginStatus.error{color:#b42318}
+    </style>
+  </head>
+  <body>
+    <h1>Cấu hình Auto Zalo</h1>
+    <label>Backend URL <input id="backendUrl" type="url" placeholder="http://localhost:8000"></label>
+    <label>API token <input id="apiToken" type="password" autocomplete="off"></label>
+    <button id="save">Lưu cấu hình</button>
+    <button id="test" class="secondary">Kiểm tra kết nối</button>
+    <section class="zalo-card">
+      <h2>Tài khoản Zalo cá nhân</h2>
+      <p id="zaloLoginStatus">Chưa kiểm tra trạng thái.</p>
+      <img id="zaloQr" alt="Mã QR đăng nhập Zalo cá nhân">
+      <button id="zaloLogin">Tạo QR đăng nhập</button>
+      <button id="zaloRefresh" class="secondary">Làm mới trạng thái</button>
+      <p>Quét QR bằng ứng dụng Zalo trên điện thoại rồi xác nhận đăng nhập.</p>
+    </section>
+    <button id="googleConnect" class="secondary">Kết nối Google</button>
+    <button id="googleTest" class="secondary">Kiểm tra Google Sheet</button>
+    <button id="pause" class="danger">Tạm dừng Zalo</button>
+    <button id="resume">Bật lại Zalo</button>
+    <div id="status" role="status"></div>
+    <script src="options.js"></script>
+  </body>
+</html>
