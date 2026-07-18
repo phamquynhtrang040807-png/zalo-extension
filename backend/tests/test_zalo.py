@@ -74,3 +74,30 @@ def test_invalid_forced_recipient_fails_closed(monkeypatch):
     assert not result.success
     assert result.error_code == "invalid_forced_recipient"
 
+
+def test_custom_message_templates_replace_lead_placeholders(monkeypatch):
+    payloads = []
+
+    def fake_post(url, json, headers, timeout):
+        payloads.append(json)
+        return httpx.Response(200, json={"message_id": "sent"})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    adapter = ZaloAdapter(_settings())
+    lead = _lead()
+    lead.display_name = "Creator A"
+
+    assert adapter.send_friend_request(
+        lead,
+        "invite-key",
+        "Xin chào {display_name}",
+    ).success
+    assert adapter.send_message(
+        lead,
+        "message-key",
+        "KOL {username} có {followers} followers và GMV {gmv}",
+    ).success
+
+    assert payloads[0]["message"] == "Xin chào Creator A"
+    assert payloads[1]["message"] == "KOL creator_a có 1234 followers và GMV 60000000"
+

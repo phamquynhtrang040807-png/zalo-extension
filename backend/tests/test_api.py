@@ -3,10 +3,12 @@ import uuid
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
+import app.main as main_module
 from app.config import get_settings
 from app.db import SessionLocal
 from app.main import app
 from app.models import OutboxTask, TaskType
+from app.services.zalo import ZaloResult
 
 
 client = TestClient(app)
@@ -103,3 +105,92 @@ def test_duplicate_capture_creates_two_sheet_insert_tasks():
             )
         )
     assert count == 2
+
+
+def test_zalo_automation_config_can_change_message_count():
+    config = {
+        "friend_request_message": "Xin chào {display_name}, mình xin phép kết bạn.",
+        "messages": [
+            "Chào {username}, đây là tin thứ nhất.",
+            "GMV ghi nhận: {gmv}.",
+        ],
+    }
+    with TestClient(app) as test_client:
+        saved = test_client.put(
+            "/v1/config/zalo-automation",
+            json=config,
+            headers=auth_headers(),
+        )
+        loaded = test_client.get(
+            "/v1/config/zalo-automation",
+            headers=auth_headers(),
+        )
+
+    assert saved.status_code == 200
+    assert loaded.status_code == 200
+    assert loaded.json() == config
+
+
+def test_zalo_automation_config_allows_invitation_only():
+    with TestClient(app) as test_client:
+        response = test_client.put(
+            "/v1/config/zalo-automation",
+            json={
+                "friend_request_message": "Xin chào, mình xin phép kết bạn.",
+                "messages": [],
+            },
+            headers=auth_headers(),
+        )
+
+    assert response.status_code == 200
+    assert response.json()["messages"] == []
+
+
+def test_zalo_automation_test_sends_current_message_list(monkeypatch):
+    sent_messages: list[str] = []
+
+    class FakeZaloAdapter:
+        def __init__(self, settings):
+            self.settings = settings
+
+        def recipient_phone(self, lead):
+            return "+84961382006"
+
+        def send_message(self, lead, idempotency_key, message_template=None):
+            sent_messages.append(message_template)
+            return ZaloResult(success=True, external_id=f"message-{len(sent_messages)}")
+
+    monkeypatch.setattr(main_module, "ZaloAdapter", FakeZaloAdapter)
+    monkeypatch.setattr(main_module.time, "sleep", lambda _: None)
+    config = {
+        "friend_request_message": "Xin chào, mình xin phép kết bạn.",
+        "messages": ["Tin thử một", "Tin thử hai"],
+    }
+    with TestClient(app) as test_client:
+        test_client.put(
+            "/v1/config/zalo-automation",
+            json=config,
+            headers=auth_headers(),
+        )
+        response = test_client.post(
+            "/v1/config/zalo-automation/test",
+            json={"phone": "0912345678"},
+            headers=auth_headers(),
+        )
+
+    assert response.status_code == 200
+    assert response.json()["sent_count"] == 2
+    assert response.json()["effective_recipient_last4"] == "2006"
+    assert response.json()["message_ids"] == ["message-1", "message-2"]
+    assert sent_messages == config["messages"]
+
+
+def test_zalo_automation_test_rejects_invalid_phone():
+    with TestClient(app) as test_client:
+        response = test_client.post(
+            "/v1/config/zalo-automation/test",
+            json={"phone": "not-a-phone"},
+            headers=auth_headers(),
+        )
+
+    assert response.status_code == 400

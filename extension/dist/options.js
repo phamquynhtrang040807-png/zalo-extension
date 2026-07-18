@@ -6,7 +6,15 @@
   var statusBox = document.querySelector("#status");
   var zaloLoginStatus = document.querySelector("#zaloLoginStatus");
   var zaloQr = document.querySelector("#zaloQr");
+  var friendRequestMessage = document.querySelector("#friendRequestMessage");
+  var zaloMessages = document.querySelector("#zaloMessages");
+  var zaloTestPhone = document.querySelector("#zaloTestPhone");
+  var testZaloAutomationButton = document.querySelector("#testZaloAutomation");
   var zaloPollTimer;
+  var DEFAULT_AUTOMATION = {
+    friend_request_message: "Xin ch\xE0o, m\xECnh mu\u1ED1n k\u1EBFt b\u1EA1n v\u1EDBi b\u1EA1n.",
+    messages: ["Ch\xE0o {username}, m\xECnh mu\u1ED1n k\u1EBFt n\u1ED1i v\xE0 trao \u0111\u1ED5i th\xEAm v\u1EDBi b\u1EA1n."]
+  };
   void load();
   document.querySelector("#save").addEventListener("click", save);
   document.querySelector("#test").addEventListener("click", () => request({ type: "health" }));
@@ -14,6 +22,8 @@
   document.querySelector("#googleTest").addEventListener("click", () => request({ type: "google-sheets-test" }));
   document.querySelector("#zaloLogin").addEventListener("click", startZaloLogin);
   document.querySelector("#zaloRefresh").addEventListener("click", () => refreshZaloLogin());
+  document.querySelector("#addZaloMessage").addEventListener("click", () => addMessageRow(""));
+  testZaloAutomationButton.addEventListener("click", testZaloAutomation);
   document.querySelector("#pause").addEventListener("click", () => request({ type: "zalo-control", enabled: false }));
   document.querySelector("#resume").addEventListener("click", () => request({ type: "zalo-control", enabled: true }));
   async function load() {
@@ -23,6 +33,7 @@
     });
     backendUrl.value = stored.backendUrl;
     apiToken.value = stored.apiToken;
+    await loadAutomationConfig();
     await refreshZaloLogin(false);
   }
   async function save() {
@@ -32,8 +43,104 @@
       return;
     }
     await chrome.storage.local.set({ backendUrl: url, apiToken: apiToken.value.trim() });
-    statusBox.textContent = "\u0110\xE3 l\u01B0u c\u1EA5u h\xECnh.";
+    const automation = readAutomationConfig();
+    if (!automation) return;
+    const response = await sendRuntime({
+      type: "zalo-automation-config-save",
+      config: automation
+    });
+    if (!response.ok) {
+      statusBox.textContent = `L\u1ED7i l\u01B0u automation: ${response.error || "Kh\xF4ng x\xE1c \u0111\u1ECBnh"}`;
+      return;
+    }
+    statusBox.textContent = `\u0110\xE3 l\u01B0u c\u1EA5u h\xECnh v\u1EDBi ${automation.messages.length} tin nh\u1EAFn t\u1EF1 \u0111\u1ED9ng.`;
     await refreshZaloLogin(false);
+  }
+  async function loadAutomationConfig() {
+    const response = await sendRuntime({ type: "zalo-automation-config-get" });
+    renderAutomationConfig(response.ok && response.data ? response.data : DEFAULT_AUTOMATION);
+    if (!response.ok) {
+      statusBox.textContent = `Kh\xF4ng t\u1EA3i \u0111\u01B0\u1EE3c automation t\u1EEB backend: ${response.error || "Kh\xF4ng x\xE1c \u0111\u1ECBnh"}`;
+    }
+  }
+  function renderAutomationConfig(config) {
+    friendRequestMessage.value = config.friend_request_message;
+    zaloMessages.replaceChildren();
+    for (const message of config.messages) addMessageRow(message);
+  }
+  function addMessageRow(value) {
+    if (zaloMessages.querySelectorAll("textarea").length >= 20) {
+      statusBox.textContent = "Ch\u1EC9 \u0111\u01B0\u1EE3c c\u1EA5u h\xECnh t\u1ED1i \u0111a 20 tin nh\u1EAFn t\u1EF1 \u0111\u1ED9ng.";
+      return;
+    }
+    const row = document.createElement("div");
+    row.className = "message-row";
+    const textarea = document.createElement("textarea");
+    textarea.maxLength = 5e3;
+    textarea.placeholder = "Nh\u1EADp n\u1ED9i dung tin nh\u1EAFn t\u1EF1 \u0111\u1ED9ng";
+    textarea.value = value;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "X\xF3a";
+    remove.title = "X\xF3a tin nh\u1EAFn n\xE0y";
+    remove.addEventListener("click", () => row.remove());
+    row.append(textarea, remove);
+    zaloMessages.append(row);
+  }
+  function readAutomationConfig() {
+    const invitation = friendRequestMessage.value.trim();
+    if (!invitation) {
+      statusBox.textContent = "L\u1EDDi nh\u1EAFn k\u1EBFt b\u1EA1n kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1EC3 tr\u1ED1ng.";
+      friendRequestMessage.focus();
+      return null;
+    }
+    const textareas = Array.from(zaloMessages.querySelectorAll("textarea"));
+    const messages = textareas.map((textarea) => textarea.value.trim());
+    const emptyIndex = messages.findIndex((message) => !message);
+    if (emptyIndex >= 0) {
+      statusBox.textContent = "Tin nh\u1EAFn t\u1EF1 \u0111\u1ED9ng kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1EC3 tr\u1ED1ng; h\xE3y nh\u1EADp n\u1ED9i dung ho\u1EB7c x\xF3a d\xF2ng.";
+      textareas[emptyIndex].focus();
+      return null;
+    }
+    return { friend_request_message: invitation, messages };
+  }
+  async function testZaloAutomation() {
+    const phone = zaloTestPhone.value.trim();
+    if (!phone) {
+      statusBox.textContent = "H\xE3y nh\u1EADp s\u1ED1 \u0111i\u1EC7n tho\u1EA1i \u0111\u1EC3 g\u1EEDi th\u1EED.";
+      zaloTestPhone.focus();
+      return;
+    }
+    const url = backendUrl.value.trim().replace(/\/$/, "");
+    if (!/^https?:\/\//.test(url)) {
+      statusBox.textContent = "Backend URL ph\u1EA3i b\u1EAFt \u0111\u1EA7u b\u1EB1ng http:// ho\u1EB7c https://";
+      return;
+    }
+    const automation = readAutomationConfig();
+    if (!automation) return;
+    testZaloAutomationButton.disabled = true;
+    statusBox.textContent = "\u0110ang l\u01B0u c\u1EA5u h\xECnh v\xE0 g\u1EEDi tin nh\u1EAFn th\u1EED\u2026";
+    try {
+      await chrome.storage.local.set({ backendUrl: url, apiToken: apiToken.value.trim() });
+      const saved = await sendRuntime({
+        type: "zalo-automation-config-save",
+        config: automation
+      });
+      if (!saved.ok) throw new Error(saved.error || "Kh\xF4ng l\u01B0u \u0111\u01B0\u1EE3c c\u1EA5u h\xECnh automation");
+      const response = await sendRuntime({
+        type: "zalo-automation-test",
+        phone
+      });
+      if (!response.ok || !response.data) {
+        throw new Error(response.error || "Kh\xF4ng g\u1EEDi \u0111\u01B0\u1EE3c tin nh\u1EAFn th\u1EED");
+      }
+      const safety = response.data.force_recipient_enabled ? ` Safety lock \u0111\xE3 chuy\u1EC3n t\u1EDBi \u2026${response.data.effective_recipient_last4}.` : "";
+      statusBox.textContent = `${response.data.message}.${safety}`;
+    } catch (error) {
+      statusBox.textContent = `L\u1ED7i g\u1EEDi th\u1EED: ${error instanceof Error ? error.message : String(error)}`;
+    } finally {
+      testZaloAutomationButton.disabled = false;
+    }
   }
   async function sendRuntime(message) {
     return await chrome.runtime.sendMessage(message);

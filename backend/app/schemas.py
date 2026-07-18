@@ -62,6 +62,45 @@ class ZaloControlResponse(BaseModel):
     paused: bool
 
 
+class ZaloAutomationConfig(BaseModel):
+    friend_request_message: str = Field(min_length=1, max_length=500)
+    messages: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("friend_request_message")
+    @classmethod
+    def clean_friend_request_message(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("messages")
+    @classmethod
+    def clean_messages(cls, values: list[str]) -> list[str]:
+        cleaned = [value.strip() for value in values]
+        if any(not value for value in cleaned):
+            raise ValueError("Tin nhắn tự động không được để trống; hãy xóa dòng nếu không dùng")
+        if any(len(value) > 5000 for value in cleaned):
+            raise ValueError("Mỗi tin nhắn tự động không được vượt quá 5000 ký tự")
+        return cleaned
+
+
+class ZaloAutomationTestRequest(BaseModel):
+    phone: str = Field(min_length=1, max_length=30)
+
+    @field_validator("phone")
+    @classmethod
+    def clean_phone(cls, value: str) -> str:
+        return value.strip()
+
+
+class ZaloAutomationTestResponse(BaseModel):
+    success: bool
+    requested_phone: str
+    effective_recipient_last4: str
+    force_recipient_enabled: bool
+    sent_count: int
+    message_ids: list[str]
+    message: str
+
+
 class GoogleAuthStartResponse(BaseModel):
     authorization_url: str
     redirect_uri: str

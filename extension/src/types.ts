@@ -29,6 +29,21 @@ export interface ExtensionConfig {
   apiToken: string;
 }
 
+export interface ZaloAutomationConfig {
+  friend_request_message: string;
+  messages: string[];
+}
+
+export interface ZaloAutomationTestResult {
+  success: boolean;
+  requested_phone: string;
+  effective_recipient_last4: string;
+  force_recipient_enabled: boolean;
+  sent_count: number;
+  message_ids: string[];
+  message: string;
+}
+
 export type RuntimeRequest =
   | { type: "capture"; payload: CapturePayload }
   | { type: "health" }
@@ -37,6 +52,9 @@ export type RuntimeRequest =
   | { type: "zalo-login-status" }
   | { type: "zalo-login-start" }
   | { type: "zalo-login-qr" }
+  | { type: "zalo-automation-config-get" }
+  | { type: "zalo-automation-config-save"; config: ZaloAutomationConfig }
+  | { type: "zalo-automation-test"; phone: string }
   | { type: "zalo-control"; enabled: boolean };
 
 export interface ZaloLoginStatus {

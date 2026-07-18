@@ -38,36 +38,48 @@ class ZaloAdapter:
             and forced_recipient_ok
         )
 
-    def send_friend_request(self, lead: Lead, idempotency_key: str) -> ZaloResult:
+    def send_friend_request(
+        self,
+        lead: Lead,
+        idempotency_key: str,
+        message_template: str | None = None,
+    ) -> ZaloResult:
         if self.settings.dry_run:
             return ZaloResult(success=True, external_id=f"dry-invite-{lead.id}")
         if not self.settings.zalo_enabled:
             return ZaloResult(success=False, error_code="disabled", error_message="Zalo is disabled")
-        recipient = self._recipient_phone(lead)
+        recipient = self.recipient_phone(lead)
         if recipient is None:
             return self._invalid_forced_recipient_result()
         return self._post(
             self.settings.zalo_invite_path,
             {
                 "phone": recipient,
-                "message": self.settings.zalo_friend_request_message,
+                "message": self._render_message(
+                    message_template or self.settings.zalo_friend_request_message,
+                    lead,
+                ),
                 "idempotency_key": idempotency_key,
             },
             idempotency_key,
         )
 
-    def send_message(self, lead: Lead, idempotency_key: str) -> ZaloResult:
+    def send_message(
+        self,
+        lead: Lead,
+        idempotency_key: str,
+        message_template: str | None = None,
+    ) -> ZaloResult:
         if self.settings.dry_run:
             return ZaloResult(success=True, external_id=f"dry-message-{lead.id}")
         if not self.settings.zalo_enabled:
             return ZaloResult(success=False, error_code="disabled", error_message="Zalo is disabled")
-        recipient = self._recipient_phone(lead)
+        recipient = self.recipient_phone(lead)
         if recipient is None:
             return self._invalid_forced_recipient_result()
-        message = self.settings.zalo_message_template.format(
-            username=lead.username,
-            followers=lead.followers or 0,
-            gmv=lead.gmv_vnd,
+        message = self._render_message(
+            message_template or self.settings.zalo_message_template,
+            lead,
         )
         return self._post(
             self.settings.zalo_message_path,
@@ -79,7 +91,20 @@ class ZaloAdapter:
             idempotency_key,
         )
 
-    def _recipient_phone(self, lead: Lead) -> str | None:
+    @staticmethod
+    def _render_message(template: str, lead: Lead) -> str:
+        replacements = {
+            "{username}": lead.username,
+            "{display_name}": lead.display_name or lead.username,
+            "{followers}": str(lead.followers or 0),
+            "{gmv}": str(lead.gmv_vnd),
+        }
+        message = template
+        for placeholder, value in replacements.items():
+            message = message.replace(placeholder, value)
+        return message
+
+    def recipient_phone(self, lead: Lead) -> str | None:
         if not self.settings.zalo_force_recipient_enabled:
             return lead.phone_e164 or (lead.phone_raw.strip() if lead.phone_raw else None)
         forced = normalize_vietnam_phone(self.settings.zalo_force_recipient_phone)

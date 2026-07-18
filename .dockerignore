@@ -6,6 +6,4 @@
 **/.pytest_cache
 backend/data
 backend/secrets
-zalo-api-final/src
-zalo-api-final/test
-zalo-api-final/docs
+zalo-api-final

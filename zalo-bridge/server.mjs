@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { LoginQRCallbackEventType, Zalo } from "../zalo-api-final/dist/index.js";
+import { LoginQRCallbackEventType, Zalo } from "zca-js";
 
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -23,7 +23,7 @@ const FRIEND_REQUEST_MESSAGE =
 let api = null;
 let account = null;
 let loginPromise = null;
-let pendingCredentials = null;
+let scannedAccount = null;
 let qrImage = null;
 let loginState = "logged_out";
 let lastError = null;
@@ -50,6 +50,11 @@ export function effectiveRecipient(requestedPhone, forceEnabled, forcedPhone) {
 }
 
 
+export function isAlreadyFriendError(error) {
+    return String(error?.code || error?.error_code || "") === "225";
+}
+
+
 function loadJson(filePath, fallback) {
     try {
         return JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -67,6 +72,53 @@ function saveJson(filePath, value) {
         mode: 0o600,
     });
     fs.renameSync(temporaryPath, filePath);
+}
+
+
+export function sessionCredentialsFromContext(context) {
+    const serializedCookie = context?.cookie?.toJSON?.();
+    const cookie = Array.isArray(serializedCookie?.cookies)
+        ? serializedCookie.cookies
+        : Array.isArray(context?.cookie)
+          ? context.cookie
+          : null;
+
+    if (!cookie || !context?.imei || !context?.userAgent) {
+        throw new Error("Zalo login completed without restorable session credentials");
+    }
+
+    return {
+        cookie,
+        imei: context.imei,
+        userAgent: context.userAgent,
+        language: context.language || "vi",
+    };
+}
+
+
+async function loadAccount(apiInstance, fallback = null) {
+    const context = await apiInstance.getContext();
+    try {
+        const response = await apiInstance.fetchAccountInfo();
+        const profile = response?.profile || response;
+        return {
+            userId: String(profile?.userId || profile?.userIdZalo || context?.uid || ""),
+            displayName:
+                profile?.displayName ||
+                profile?.zaloName ||
+                profile?.username ||
+                fallback?.displayName ||
+                "Zalo Personal",
+            phoneNumber: profile?.phoneNumber || "",
+        };
+    } catch (error) {
+        console.warn(`Could not load Zalo account profile: ${errorMessage(error)}`);
+        return {
+            userId: String(context?.uid || ""),
+            displayName: fallback?.displayName || "Zalo Personal",
+            phoneNumber: "",
+        };
+    }
 }
 
 
@@ -96,8 +148,9 @@ async function restoreSession() {
         const credentials = loadJson(SESSION_PATH, null);
         if (!credentials) throw new Error("Session file is invalid");
         const zalo = new Zalo({ logging: false, checkUpdate: false, selfListen: false });
-        api = await zalo.login(credentials);
-        account = await api.fetchAccountInfo();
+        const restoredApi = await zalo.login(credentials);
+        account = await loadAccount(restoredApi);
+        api = restoredApi;
         loginState = "authenticated";
         lastError = null;
     } catch (error) {
@@ -113,20 +166,26 @@ function startQrLogin() {
     if (loginPromise) return;
     api = null;
     account = null;
-    pendingCredentials = null;
+    scannedAccount = null;
     qrImage = null;
     lastError = null;
     loginState = "generating_qr";
 
     const zalo = new Zalo({ logging: false, checkUpdate: false, selfListen: false });
     loginPromise = zalo
-        .loginQR({}, (event) => {
+        .loginQR({
+            userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+            language: "vi",
+        }, (event) => {
             switch (event.type) {
                 case LoginQRCallbackEventType.QRCodeGenerated:
                     qrImage = event.data.image;
                     loginState = "waiting_for_scan";
                     break;
                 case LoginQRCallbackEventType.QRCodeScanned:
+                    scannedAccount = {
+                        displayName: event.data?.display_name || "Zalo Personal",
+                    };
                     loginState = "waiting_for_confirmation";
                     break;
                 case LoginQRCallbackEventType.QRCodeExpired:
@@ -138,28 +197,38 @@ function startQrLogin() {
                     loginState = "qr_declined";
                     break;
                 case LoginQRCallbackEventType.GotLoginInfo:
-                    pendingCredentials = event.data;
                     loginState = "finishing_login";
                     break;
             }
         })
         .then(async (loggedInApi) => {
+            if (!loggedInApi) throw new Error("Zalo login did not return an API session");
+
+            // Follow the Channel login flow: the resolved API instance is the source
+            // of truth. Persist its context instead of depending on callback timing.
+            const context = await loggedInApi.getContext();
+            saveJson(SESSION_PATH, sessionCredentialsFromContext(context));
+            account = await loadAccount(loggedInApi, scannedAccount);
             api = loggedInApi;
-            account = await api.fetchAccountInfo();
-            if (!pendingCredentials) throw new Error("Login completed without session credentials");
-            saveJson(SESSION_PATH, pendingCredentials);
-            pendingCredentials = null;
+            scannedAccount = null;
             qrImage = null;
             loginState = "authenticated";
             lastError = null;
         })
         .catch((error) => {
+            const callbackState = loginState;
             api = null;
             account = null;
-            pendingCredentials = null;
+            scannedAccount = null;
             qrImage = null;
-            loginState = "login_failed";
-            lastError = errorMessage(error);
+            if (["qr_expired", "qr_declined"].includes(callbackState)) {
+                loginState = callbackState;
+                lastError = null;
+            } else {
+                loginState = "login_failed";
+                lastError = errorMessage(error);
+                console.error(`Zalo QR login failed: ${lastError}`);
+            }
         })
         .finally(() => {
             loginPromise = null;
@@ -284,8 +353,18 @@ async function handleZaloAction(req, res, action) {
         const result = await performIdempotently(body.idempotency_key, async () => {
             const user = await findRecipient(recipientPhone);
             if (action === "friend_request") {
-                await api.sendFriendRequest(body.message || FRIEND_REQUEST_MESSAGE, user.uid);
-                return { success: true, request_id: body.idempotency_key, user_id: String(user.uid) };
+                try {
+                    await api.sendFriendRequest(body.message || FRIEND_REQUEST_MESSAGE, user.uid);
+                    return { success: true, request_id: body.idempotency_key, user_id: String(user.uid) };
+                } catch (error) {
+                    if (!isAlreadyFriendError(error)) throw error;
+                    return {
+                        success: true,
+                        request_id: body.idempotency_key,
+                        user_id: String(user.uid),
+                        already_friends: true,
+                    };
+                }
             }
             if (typeof body.message !== "string" || !body.message.trim()) {
                 const error = new Error("message is required");

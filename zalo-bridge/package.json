@@ -1,0 +1,9 @@
+{
+  "name": "auto-zalo-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "zca-js": "2.1.2"
+  }
+}

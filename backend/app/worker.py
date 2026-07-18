@@ -1,5 +1,6 @@
 import logging
 import time
+from hashlib import sha256
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, update
@@ -9,7 +10,7 @@ from app.config import get_settings
 from app.db import SessionLocal, init_db
 from app.models import Lead, OutboxTask, StepStatus, TaskStatus, TaskType
 from app.outbox import enqueue_task
-from app.services.runtime import is_zalo_paused
+from app.services.runtime import get_zalo_automation_config, is_zalo_paused
 from app.services.sheets import GoogleSheetsAdapter
 from app.services.zalo import ZaloAdapter, ZaloResult
 
@@ -125,11 +126,49 @@ def _process_zalo(db: Session, task: OutboxTask, lead: Lead, invite: bool) -> No
 
     if invite:
         lead.zalo_invite_status = StepStatus.processing.value
-        result = zalo_adapter.send_friend_request(lead, f"{lead.profile_key}:invite")
+        config = _automation_config(db)
+        result = zalo_adapter.send_friend_request(
+            lead,
+            f"{lead.profile_key}:invite",
+            str(config["friend_request_message"]),
+        )
     else:
         lead.zalo_message_status = StepStatus.processing.value
-        result = zalo_adapter.send_message(lead, f"{lead.profile_key}:message")
+        result = _send_configured_messages(db, lead)
     _apply_zalo_result(db, task, lead, result, invite)
+
+
+def _automation_config(db: Session) -> dict[str, object]:
+    return get_zalo_automation_config(
+        db,
+        settings.zalo_friend_request_message,
+        settings.zalo_message_template,
+    )
+
+
+def _send_configured_messages(db: Session, lead: Lead) -> ZaloResult:
+    messages = list(_automation_config(db)["messages"])
+    external_ids: list[str] = []
+    minimum_interval = 60.0 / settings.zalo_rate_limit_per_minute
+
+    for index, message_template in enumerate(messages):
+        digest = sha256(message_template.encode("utf-8")).hexdigest()[:16]
+        result = zalo_adapter.send_message(
+            lead,
+            f"{lead.profile_key}:message:{index}:{digest}",
+            message_template,
+        )
+        if not result.success:
+            return result
+        if result.external_id:
+            external_ids.append(result.external_id)
+        if index < len(messages) - 1:
+            time.sleep(minimum_interval)
+
+    return ZaloResult(
+        success=True,
+        external_id=",".join(external_ids) or None,
+    )
 
 
 def _apply_zalo_result(

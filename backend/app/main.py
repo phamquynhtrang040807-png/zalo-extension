@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
 from html import escape
+import time
+import uuid
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -27,8 +29,16 @@ from app.schemas import (
     NormalizedCapture,
     ZaloControlRequest,
     ZaloControlResponse,
+    ZaloAutomationConfig,
+    ZaloAutomationTestRequest,
+    ZaloAutomationTestResponse,
 )
-from app.services.runtime import is_zalo_paused, set_zalo_paused
+from app.services.runtime import (
+    get_zalo_automation_config,
+    is_zalo_paused,
+    set_zalo_automation_config,
+    set_zalo_paused,
+)
 from app.services.google_oauth import complete_authorization, create_authorization_url
 from app.services.sheets import GoogleSheetsAdapter
 from app.services.zalo import ZaloAdapter
@@ -264,6 +274,112 @@ def get_job(job_id: str, db: Session = Depends(get_db)) -> JobResponse:
 def control_zalo(payload: ZaloControlRequest, db: Session = Depends(get_db)) -> ZaloControlResponse:
     set_zalo_paused(db, not payload.enabled)
     return ZaloControlResponse(enabled=payload.enabled, paused=not payload.enabled)
+
+
+@app.get(
+    "/v1/config/zalo-automation",
+    response_model=ZaloAutomationConfig,
+    dependencies=[Depends(require_api_token)],
+)
+def get_zalo_automation(db: Session = Depends(get_db)) -> ZaloAutomationConfig:
+    return ZaloAutomationConfig.model_validate(
+        get_zalo_automation_config(
+            db,
+            settings.zalo_friend_request_message,
+            settings.zalo_message_template,
+        )
+    )
+
+
+@app.put(
+    "/v1/config/zalo-automation",
+    response_model=ZaloAutomationConfig,
+    dependencies=[Depends(require_api_token)],
+)
+def update_zalo_automation(
+    payload: ZaloAutomationConfig,
+    db: Session = Depends(get_db),
+) -> ZaloAutomationConfig:
+    set_zalo_automation_config(
+        db,
+        payload.friend_request_message,
+        payload.messages,
+    )
+    return payload
+
+
+@app.post(
+    "/v1/config/zalo-automation/test",
+    response_model=ZaloAutomationTestResponse,
+    dependencies=[Depends(require_api_token)],
+)
+def test_zalo_automation(
+    payload: ZaloAutomationTestRequest,
+    db: Session = Depends(get_db),
+) -> ZaloAutomationTestResponse:
+    if is_zalo_paused(db):
+        raise HTTPException(status_code=409, detail="Zalo đang tạm dừng; hãy bật lại trước khi gửi thử")
+
+    phone = normalize_vietnam_phone(payload.phone)
+    if not phone:
+        raise HTTPException(status_code=400, detail="Số điện thoại Việt Nam không hợp lệ")
+
+    config = get_zalo_automation_config(
+        db,
+        settings.zalo_friend_request_message,
+        settings.zalo_message_template,
+    )
+    messages = list(config["messages"])
+    adapter = ZaloAdapter(settings)
+    lead = Lead(
+        id=f"test-{uuid.uuid4()}",
+        profile_key=f"test:{uuid.uuid4()}",
+        username="zalo_test",
+        display_name="Kiểm tra Zalo",
+        phone_raw=payload.phone,
+        phone_local=phone.local,
+        phone_e164=phone.e164,
+        gmv_vnd=0,
+    )
+    effective_recipient = adapter.recipient_phone(lead)
+    if not effective_recipient:
+        raise HTTPException(status_code=400, detail="Không xác định được số điện thoại nhận")
+
+    message_ids: list[str] = []
+    test_run_id = uuid.uuid4().hex
+    minimum_interval = 60.0 / settings.zalo_rate_limit_per_minute
+    for index, message_template in enumerate(messages):
+        result = adapter.send_message(
+            lead,
+            f"automation-test:{test_run_id}:{index}",
+            message_template,
+        )
+        if not result.success:
+            detail = ": ".join(
+                part for part in (result.error_code, result.error_message) if part
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=f"Tin nhắn thử thứ {index + 1} thất bại: {detail or 'Lỗi Zalo không xác định'}",
+            )
+        if result.external_id:
+            message_ids.append(result.external_id)
+        if index < len(messages) - 1:
+            time.sleep(minimum_interval)
+
+    return ZaloAutomationTestResponse(
+        success=True,
+        requested_phone=payload.phone,
+        effective_recipient_last4=effective_recipient[-4:],
+        force_recipient_enabled=settings.zalo_force_recipient_enabled,
+        sent_count=len(messages),
+        message_ids=message_ids,
+        message=(
+            f"Đã gửi thử {len(messages)} tin nhắn tới số …{effective_recipient[-4:]}"
+            if messages
+            else "Không có tin nhắn tự động nào để gửi thử"
+        ),
+    )
 
 
 def _personal_zalo_bridge() -> PersonalZaloBridge:
