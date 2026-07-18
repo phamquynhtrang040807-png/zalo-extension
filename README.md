@@ -8,10 +8,10 @@ Hệ thống gồm Chrome Extension Manifest V3 và backend FastAPI có hàng đ
 Copy-Item .env.example .env
 docker compose up --build -d
 docker compose ps
-Invoke-RestMethod http://localhost:8000/health
+Invoke-RestMethod http://localhost:8001/health
 ```
 
-API tại `http://localhost:8000`, Swagger tại `http://localhost:8000/docs`. Thay `API_TOKEN` trong `.env` bằng chuỗi ngẫu nhiên dài trước khi sử dụng.
+API tại `http://localhost:8001`, Swagger tại `http://localhost:8001/docs`. Thay `API_TOKEN` trong `.env` bằng chuỗi ngẫu nhiên dài trước khi sử dụng.
 
 Để chạy với PostgreSQL trên VPS/Cloud:
 
@@ -38,7 +38,7 @@ Sau đó mở `chrome://extensions`, bật **Developer mode**, chọn **Load unp
 
 Mở **Extension options** rồi nhập:
 
-- Backend URL: `http://localhost:8000`
+- Backend URL: `http://localhost:8001`
 - API token: giống `API_TOKEN` trong `.env`
 
 Nút nổi chỉ hiện khi trang có dấu hiệu là trang chi tiết nhà sáng tạo và có GMV. Manifest hiện giới hạn ở các miền TikTok/TikTok Global Shop; khi có URL thật, hãy thu hẹp `matches` và `host_permissions` trong `extension/manifest.json` về đúng hostname đó. Nếu backend đặt trên Cloud, thêm origin HTTPS của backend vào `host_permissions` trước khi build lại extension.
@@ -68,7 +68,7 @@ OAuth client ID/secret không được đặt trong extension. Chúng chỉ nằ
 GOOGLE_AUTH_MODE=oauth
 GOOGLE_OAUTH_CLIENT_ID=client-id-moi-sau-khi-rotate
 GOOGLE_OAUTH_CLIENT_SECRET=client-secret-moi-sau-khi-rotate
-GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/v1/integrations/google/callback
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8001/v1/integrations/google/callback
 GOOGLE_SPREADSHEET_ID=id-trong-url
 GOOGLE_SHEET_NAME=Leads
 GOOGLE_SHEETS_ENABLED=false
@@ -89,7 +89,7 @@ Service `zalo-bridge` dùng package `zca-js` được khóa phiên bản trong `
 ```dotenv
 ZALO_ENABLED=true
 DRY_RUN=false
-ZALO_BASE_URL=http://zalo-bridge:3001
+ZALO_BASE_URL=http://zalo-bridge:3005
 ZALO_TOKEN=chuoi-bi-mat-dai
 ZALO_FORCE_RECIPIENT_ENABLED=true
 ZALO_FORCE_RECIPIENT_PHONE=0961382006
@@ -97,7 +97,7 @@ ZALO_FRIEND_REQUEST_MESSAGE=Xin chào, mình muốn kết bạn với bạn.
 ZALO_MESSAGE_TEMPLATE=Chào {username}, mình muốn trao đổi với bạn về cơ hội hợp tác.
 ```
 
-Sau khi chạy `docker compose up --build -d`, reload Extension tại `chrome://extensions`, mở **Extension options** và dùng khối **Tài khoản Zalo cá nhân** ngay dưới Backend URL/API token. Bấm **Tạo QR đăng nhập**, quét QR bằng ứng dụng Zalo trên điện thoại và xác nhận. Giao diện sẽ hiển thị tên tài khoản khi phiên sẵn sàng. Phiên được tự khôi phục sau khi container khởi động lại; nếu Zalo làm hết hạn phiên thì quét lại QR. Trang `http://localhost:3001` vẫn có thể dùng như giao diện dự phòng.
+Sau khi chạy `docker compose up --build -d`, reload Extension tại `chrome://extensions`, mở **Extension options** và dùng khối **Tài khoản Zalo cá nhân** ngay dưới Backend URL/API token. Bấm **Tạo QR đăng nhập**, quét QR bằng ứng dụng Zalo trên điện thoại và xác nhận. Giao diện sẽ hiển thị tên tài khoản khi phiên sẵn sàng. Phiên được tự khôi phục sau khi container khởi động lại; nếu Zalo làm hết hạn phiên thì quét lại QR. Trang `http://localhost:3005` vẫn có thể dùng như giao diện dự phòng.
 
 Khối **Automation kết bạn và nhắn tin** cho phép sửa lời nhắn kết bạn, thêm/xóa tối đa 20 tin nhắn tự động, hoặc xóa hết tin nhắn để chỉ gửi lời mời. Cấu hình được lưu ở backend và áp dụng cho các job Zalo chưa hoàn tất. Các biến template: `{username}`, `{display_name}`, `{followers}`, `{gmv}`. Có thể tạm dừng ngay từ trang Options; worker giữ task trong hàng đợi và không tính lần retry khi đang tạm dừng. Mỗi tin nhắn có `idempotency_key` riêng để retry không gửi trùng.
 

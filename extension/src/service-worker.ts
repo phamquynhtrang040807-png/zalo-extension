@@ -1,7 +1,7 @@
 import type { ExtensionConfig, RuntimeRequest, RuntimeResponse } from "./types";
 
 const DEFAULT_CONFIG: ExtensionConfig = {
-  backendUrl: "http://localhost:8000",
+  backendUrl: "http://localhost:8001",
   apiToken: "change-me-to-a-long-random-token"
 };
 
@@ -10,7 +10,13 @@ chrome.runtime.onInstalled.addListener(async () => {
     backendUrl: DEFAULT_CONFIG.backendUrl,
     apiToken: DEFAULT_CONFIG.apiToken
   });
-  await chrome.storage.local.set(current);
+  await chrome.storage.local.set({
+    ...current,
+    backendUrl:
+      current.backendUrl === "http://localhost:8000"
+        ? DEFAULT_CONFIG.backendUrl
+        : current.backendUrl
+  });
 });
 
 chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());

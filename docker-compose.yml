@@ -1,7 +1,7 @@
 services:
   api:
     build: ./backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001
     env_file:
       - path: .env
         required: false
@@ -10,7 +10,7 @@ services:
       GOOGLE_SERVICE_ACCOUNT_FILE: /run/secrets/google-service-account.json
       GOOGLE_OAUTH_TOKEN_FILE: /run/secrets/google-oauth-token.json
     ports:
-      - "8000:8000"
+      - "8001:8001"
     volumes:
       - auto-zalo-data:/data
       - ./backend/secrets:/run/secrets:ro
@@ -44,12 +44,13 @@ services:
     environment:
       DATA_DIR: /data
       ZALO_BRIDGE_TOKEN: ${ZALO_TOKEN}
+      PORT: 3005
     ports:
-      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:3005:3005"
     volumes:
       - auto-zalo-session:/data
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3005/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 5s
       timeout: 3s
       retries: 10

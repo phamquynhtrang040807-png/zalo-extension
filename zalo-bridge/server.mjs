@@ -7,7 +7,7 @@ import { LoginQRCallbackEventType, Zalo } from "zca-js";
 
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env.PORT || 3001);
+const PORT = Number(process.env.PORT || 3005);
 const DATA_DIR = process.env.DATA_DIR || path.join(MODULE_DIR, "data");
 const SESSION_PATH = path.join(DATA_DIR, "credentials.json");
 const IDEMPOTENCY_PATH = path.join(DATA_DIR, "idempotency.json");

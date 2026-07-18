@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     )
     google_oauth_token_file: str = "secrets/google-oauth-token.json"
     google_oauth_redirect_uri: str = (
-        "http://localhost:8000/v1/integrations/google/callback"
+        "http://localhost:8001/v1/integrations/google/callback"
     )
 
     zalo_enabled: bool = False

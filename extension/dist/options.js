@@ -28,9 +28,13 @@
   document.querySelector("#resume").addEventListener("click", () => request({ type: "zalo-control", enabled: true }));
   async function load() {
     const stored = await chrome.storage.local.get({
-      backendUrl: "http://localhost:8000",
+      backendUrl: "http://localhost:8001",
       apiToken: "change-me-to-a-long-random-token"
     });
+    if (stored.backendUrl === "http://localhost:8000") {
+      stored.backendUrl = "http://localhost:8001";
+      await chrome.storage.local.set({ backendUrl: stored.backendUrl });
+    }
     backendUrl.value = stored.backendUrl;
     apiToken.value = stored.apiToken;
     await loadAutomationConfig();
