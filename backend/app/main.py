@@ -63,6 +63,7 @@ app.add_middleware(
         for origin in settings.cors_allow_origins.split(",")
         if origin.strip()
     ],
+    allow_origin_regex=settings.cors_allow_origin_regex or None,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],

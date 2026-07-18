@@ -18,8 +18,8 @@ def auth_headers():
     return {"Authorization": f"Bearer {get_settings().api_token}"}
 
 
-def test_allows_extension_cors_preflight():
-    origin = "chrome-extension://bgcapdkjgejpoemllfcnhjgokomlflnh"
+def test_allows_extension_cors_preflight_for_any_valid_extension_id():
+    origin = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
     with TestClient(app) as test_client:
         response = test_client.options(
             "/v1/config/zalo-automation",
