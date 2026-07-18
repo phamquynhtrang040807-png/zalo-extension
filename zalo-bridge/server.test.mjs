@@ -29,7 +29,7 @@ test("forced recipient overrides the requested recipient", () => {
     );
     assert.equal(
         effectiveRecipient("zalo-id_creator", false, "0961382006"),
-        "zalo-id_creator",
+        null,
     );
 });
 

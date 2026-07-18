@@ -42,8 +42,8 @@ def test_force_recipient_redirects_invitation_and_message(monkeypatch):
     assert adapter.send_message(_lead(), "message-key").success
 
     assert [payload["phone"] for payload in payloads] == [
-        "+84961382006",
-        "+84961382006",
+        "0961382006",
+        "0961382006",
     ]
 
 
@@ -58,7 +58,20 @@ def test_disabling_force_recipient_restores_lead_phone(monkeypatch):
     adapter = ZaloAdapter(_settings(zalo_force_recipient_enabled=False))
 
     assert adapter.send_message(_lead(), "message-key").success
-    assert payloads[0]["phone"] == "+84912345678"
+    assert payloads[0]["phone"] == "0912345678"
+
+
+def test_nine_and_ten_digit_inputs_use_the_same_ten_digit_recipient():
+    adapter = ZaloAdapter(_settings(zalo_force_recipient_enabled=False))
+    nine_digits = _lead()
+    nine_digits.phone_e164 = None
+    nine_digits.phone_raw = "912345678"
+    ten_digits = _lead()
+    ten_digits.phone_e164 = None
+    ten_digits.phone_raw = "0912345678"
+
+    assert adapter.recipient_phone(nine_digits) == "0912345678"
+    assert adapter.recipient_phone(ten_digits) == "0912345678"
 
 
 def test_invalid_forced_recipient_fails_closed(monkeypatch):

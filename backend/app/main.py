@@ -179,7 +179,7 @@ def capture(payload: CaptureRequest, db: Session = Depends(get_db)) -> CaptureRe
     followers = normalize_followers(payload.followers_raw)
     gmv_vnd = normalize_gmv(payload.gmv_raw)
     phone = normalize_vietnam_phone(payload.phone_raw)
-    has_zalo_value = bool(payload.phone_raw and payload.phone_raw.strip())
+    has_zalo_value = phone is not None
     normalized = NormalizedCapture(
         followers=followers,
         gmv_vnd=gmv_vnd,
@@ -210,7 +210,7 @@ def capture(payload: CaptureRequest, db: Session = Depends(get_db)) -> CaptureRe
     lead.followers = followers
     lead.gmv_raw = payload.gmv_raw
     lead.gmv_vnd = gmv_vnd or 0
-    lead.phone_raw = payload.phone_raw
+    lead.phone_raw = phone.local if phone else None
     lead.phone_local = phone.local if phone else None
     lead.phone_e164 = phone.e164 if phone else None
     lead.captured_at = payload.captured_at
@@ -227,7 +227,7 @@ def capture(payload: CaptureRequest, db: Session = Depends(get_db)) -> CaptureRe
             action="saved_missing_phone",
             lead_id=lead.id,
             job_id=lead.id,
-            message="Đã lưu hồ sơ nhưng trường SĐT đang trống",
+            message="Đã lưu hồ sơ nhưng SĐT không thể chuẩn hóa thành đúng 10 chữ số",
             normalized=normalized,
         )
 
@@ -353,15 +353,20 @@ def test_zalo_automation(
 
     raw_phone = payload.phone.strip()
     phone = normalize_vietnam_phone(raw_phone)
+    if not phone:
+        raise HTTPException(
+            status_code=400,
+            detail="Số điện thoại phải chuẩn hóa được thành đúng 10 chữ số, bắt đầu bằng 0",
+        )
 
     lead = Lead(
         id=f"test-{uuid.uuid4()}",
         profile_key=f"test:{uuid.uuid4()}",
         username="zalo_test",
         display_name="Kiểm tra Zalo",
-        phone_raw=raw_phone,
-        phone_local=phone.local if phone else None,
-        phone_e164=phone.e164 if phone else None,
+        phone_raw=phone.local,
+        phone_local=phone.local,
+        phone_e164=phone.e164,
         gmv_vnd=0,
     )
     test_run_id = uuid.uuid4().hex

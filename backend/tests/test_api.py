@@ -120,13 +120,13 @@ def test_saves_missing_phone():
     assert response.json()["action"] == "saved_missing_phone"
 
 
-def test_keeps_non_standard_zalo_value():
+def test_non_standard_zalo_value_is_not_sent():
     with TestClient(app) as test_client:
         response = test_client.post(
             "/v1/captures", json=payload(phone_raw="zalo-id_creator"), headers=auth_headers()
         )
     assert response.status_code == 200
-    assert response.json()["action"] == "sent"
+    assert response.json()["action"] == "saved_missing_phone"
     assert response.json()["normalized"]["phone_local"] is None
 
 
@@ -224,7 +224,7 @@ def test_zalo_automation_test_sends_current_message_list(monkeypatch):
     assert sent_messages == config["messages"]
 
 
-def test_zalo_automation_test_accepts_any_non_empty_phone(monkeypatch):
+def test_zalo_automation_test_rejects_value_that_is_not_a_phone(monkeypatch):
     class FakeZaloAdapter:
         def __init__(self, settings):
             self.settings = settings
@@ -248,5 +248,4 @@ def test_zalo_automation_test_accepts_any_non_empty_phone(monkeypatch):
             headers=auth_headers(),
         )
 
-    assert response.status_code == 200
-    assert response.json()["sent_count"] == 1
+    assert response.status_code == 400

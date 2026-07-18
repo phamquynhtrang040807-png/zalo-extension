@@ -240,7 +240,11 @@
     return normalized.slice(0, 100);
   }
   function normalizeZaloValue(value) {
-    return /^\d{9}$/.test(value) ? `0${value}` : value;
+    const digits = value.replace(/\D/g, "");
+    if (/^[35789]\d{8}$/.test(digits)) return `0${digits}`;
+    if (/^0[35789]\d{8}$/.test(digits)) return digits;
+    if (/^84[35789]\d{8}$/.test(digits)) return `0${digits.slice(2)}`;
+    return value;
   }
   async function revealZaloPhone(root = document, username = "", options = {}) {
     const existing = phoneFromZaloPopup(root);
@@ -396,7 +400,7 @@
       });
       if (!response.ok || !response.data) throw new Error(response.error || "Backend kh\xF4ng ph\u1EA3n h\u1ED3i");
       const labels = {
-        queued: "\u2713 \u0110\xE3 \u0111\u01B0a v\xE0o h\xE0ng \u0111\u1EE3i",
+        sent: "\u2713 \u0110\xE3 g\u1EEDi Zalo tr\u1EF1c ti\u1EBFp",
         saved_missing_phone: "\u26A0 \u0110\xE3 l\u01B0u \u2014 thi\u1EBFu S\u0110T"
       };
       setState(button, labels[response.data.action], "success");

@@ -24,6 +24,18 @@ describe("Zalo contact popover", () => {
     expect(phoneFromZaloPopup(document)).toBe("0963263987");
   });
 
+  it("keeps an existing leading zero and strips phone separators", () => {
+    document.body.innerHTML = "<div><span>Zalo:</span><div>0946 475 991</div></div>";
+
+    expect(phoneFromZaloPopup(document)).toBe("0946475991");
+  });
+
+  it("converts the Vietnam country code to a ten-digit local number", () => {
+    document.body.innerHTML = "<div><span>Zalo:</span><div>+84 946 475 991</div></div>";
+
+    expect(phoneFromZaloPopup(document)).toBe("0946475991");
+  });
+
   it("keeps a non-standard Zalo value instead of rejecting it", () => {
     document.body.innerHTML = "<div><span>Zalo:</span><div>zalo-id_creator</div></div>";
 
@@ -41,7 +53,7 @@ describe("Zalo contact popover", () => {
     });
 
     await expect(revealZaloPhone(document, "quynhanh_lee", { candidateWaitMs: 50 })).resolves.toBe(
-      "0912 345 678"
+      "0912345678"
     );
   });
 

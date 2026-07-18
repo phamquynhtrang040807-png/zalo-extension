@@ -106,9 +106,13 @@ class ZaloAdapter:
 
     def recipient_phone(self, lead: Lead) -> str | None:
         if not self.settings.zalo_force_recipient_enabled:
-            return lead.phone_e164 or (lead.phone_raw.strip() if lead.phone_raw else None)
+            # zca-js findUser is most consistent with the ten-digit local form.
+            normalized = normalize_vietnam_phone(
+                lead.phone_local or lead.phone_e164 or lead.phone_raw
+            )
+            return normalized.local if normalized else None
         forced = normalize_vietnam_phone(self.settings.zalo_force_recipient_phone)
-        return forced.e164 if forced else None
+        return forced.local if forced else None
 
     @staticmethod
     def _invalid_forced_recipient_result() -> ZaloResult:

@@ -41,7 +41,11 @@ function contactValue(value: string): string | null {
 }
 
 function normalizeZaloValue(value: string): string {
-  return /^\d{9}$/.test(value) ? `0${value}` : value;
+  const digits = value.replace(/\D/g, "");
+  if (/^[35789]\d{8}$/.test(digits)) return `0${digits}`;
+  if (/^0[35789]\d{8}$/.test(digits)) return digits;
+  if (/^84[35789]\d{8}$/.test(digits)) return `0${digits.slice(2)}`;
+  return value;
 }
 
 /** Open the contact popover when necessary and wait for its asynchronous content. */

@@ -48,7 +48,7 @@ export function normalizeVietnamPhone(value) {
 export function effectiveRecipient(requestedPhone, forceEnabled, forcedPhone) {
     const raw = String(forceEnabled ? forcedPhone : requestedPhone || "").trim();
     if (!raw) return null;
-    return normalizeVietnamPhone(raw) || raw;
+    return normalizeVietnamPhone(raw);
 }
 
 

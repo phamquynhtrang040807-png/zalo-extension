@@ -112,9 +112,9 @@ Parser nằm tại `extension/src/parser.ts`. Hãy bổ sung selector ổn đị
 Quy tắc nghiệp vụ đã triển khai:
 
 - Không giới hạn GMV tối thiểu; Sheet giữ nguyên văn bản GMV đọc từ TikTok.
-- Trường SĐT trống: lưu Sheet với `missing_phone`, không gọi Zalo; mọi giá trị SĐT không rỗng đều được chuyển tiếp, không chặn theo định dạng.
+- SĐT được chuẩn hóa thành đúng 10 chữ số liền nhau dạng `0xxxxxxxxx`: số 9 chữ số được thêm `0`, dấu phân cách bị loại bỏ và `+84` được đổi về `0`. Giá trị không chuẩn hóa được sẽ lưu `missing_phone` và không gọi Zalo.
 - Database dùng `profile_id`, fallback username để theo dõi trạng thái Zalo; Google Sheet luôn insert và chấp nhận dòng trùng.
-- Ngay khi API nhận capture có trường SĐT, API gửi trực tiếp lần lượt các tin nhắn đã cấu hình; đồng bộ Sheet chạy độc lập qua hàng đợi.
+- Ngay khi API nhận capture có SĐT đã chuẩn hóa đủ 10 chữ số, API gửi trực tiếp lần lượt các tin nhắn đã cấu hình; đồng bộ Sheet chạy độc lập qua hàng đợi.
 - Automation không tạo hoặc chờ lời mời kết bạn và không phụ thuộc worker để gửi Zalo. Bấm thu thập lại tạo một lượt gửi mới.
 - Mỗi bước retry tối đa 3 lần; thành công từng bước được lưu độc lập.
 
