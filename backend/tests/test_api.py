@@ -85,7 +85,8 @@ def test_queues_eligible_lead_and_exposes_job():
         assert body["action"] == "queued"
         job = test_client.get(f"/v1/jobs/{body['job_id']}", headers=auth_headers())
     assert job.status_code == 200
-    assert job.json()["zalo_invite_status"] == "pending"
+    assert job.json()["sheet_status"] == "pending"
+    assert job.json()["zalo_invite_status"] == "not_queued"
 
 
 def test_saves_missing_phone():
@@ -201,12 +202,29 @@ def test_zalo_automation_test_sends_current_message_list(monkeypatch):
     assert sent_messages == config["messages"]
 
 
-def test_zalo_automation_test_rejects_invalid_phone():
+def test_zalo_automation_test_accepts_any_non_empty_phone(monkeypatch):
+    class FakeZaloAdapter:
+        def __init__(self, settings):
+            self.settings = settings
+
+        def recipient_phone(self, lead):
+            return lead.phone_raw
+
+        def send_message(self, lead, idempotency_key, message_template=None):
+            return ZaloResult(success=True, external_id="message-1")
+
+    monkeypatch.setattr(main_module, "ZaloAdapter", FakeZaloAdapter)
     with TestClient(app) as test_client:
+        test_client.put(
+            "/v1/config/zalo-automation",
+            json={"friend_request_message": "Xin chào", "messages": ["Tin thử"]},
+            headers=auth_headers(),
+        )
         response = test_client.post(
             "/v1/config/zalo-automation/test",
             json={"phone": "not-a-phone"},
             headers=auth_headers(),
         )
 
-    assert response.status_code == 400
+    assert response.status_code == 200
+    assert response.json()["sent_count"] == 1

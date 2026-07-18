@@ -22,9 +22,7 @@ class CaptureRequest(BaseModel):
         return value.strip().lstrip("@")
 
 
-CaptureAction = Literal[
-    "skipped_gmv", "saved_missing_phone", "queued", "duplicate_completed"
-]
+CaptureAction = Literal["saved_missing_phone", "queued"]
 
 
 class NormalizedCapture(BaseModel):

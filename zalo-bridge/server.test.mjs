@@ -27,6 +27,10 @@ test("forced recipient overrides the requested recipient", () => {
         effectiveRecipient("0912345678", false, "0961382006"),
         "0912345678",
     );
+    assert.equal(
+        effectiveRecipient("zalo-id_creator", false, "0961382006"),
+        "zalo-id_creator",
+    );
 });
 
 

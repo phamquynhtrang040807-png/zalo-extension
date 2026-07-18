@@ -97,6 +97,8 @@ def process_task(db: Session, task: OutboxTask) -> None:
             lead.sheet_status = StepStatus.completed.value
             task.status = TaskStatus.completed.value
             task.last_error = None
+            if result.row is not None and lead.phone_raw and lead.phone_raw.strip():
+                _ensure_invite_task(db, lead)
         elif task.task_type == TaskType.zalo_invite.value:
             _process_zalo(db, task, lead, invite=True)
         elif task.task_type == TaskType.zalo_message.value:
@@ -127,9 +129,10 @@ def _process_zalo(db: Session, task: OutboxTask, lead: Lead, invite: bool) -> No
     if invite:
         lead.zalo_invite_status = StepStatus.processing.value
         config = _automation_config(db)
+        delivery_key = _delivery_key(lead)
         result = zalo_adapter.send_friend_request(
             lead,
-            f"{lead.profile_key}:invite",
+            f"{delivery_key}:invite",
             str(config["friend_request_message"]),
         )
     else:
@@ -150,12 +153,13 @@ def _send_configured_messages(db: Session, lead: Lead) -> ZaloResult:
     messages = list(_automation_config(db)["messages"])
     external_ids: list[str] = []
     minimum_interval = 60.0 / settings.zalo_rate_limit_per_minute
+    delivery_key = _delivery_key(lead)
 
     for index, message_template in enumerate(messages):
         digest = sha256(message_template.encode("utf-8")).hexdigest()[:16]
         result = zalo_adapter.send_message(
             lead,
-            f"{lead.profile_key}:message:{index}:{digest}",
+            f"{delivery_key}:message:{index}:{digest}",
             message_template,
         )
         if not result.success:
@@ -229,6 +233,24 @@ def _ensure_message_task(db: Session, lead: Lead) -> None:
     if lead.zalo_message_status != StepStatus.completed.value:
         lead.zalo_message_status = StepStatus.pending.value
         enqueue_task(db, lead.id, TaskType.zalo_message)
+
+
+def _ensure_invite_task(db: Session, lead: Lead) -> None:
+    if not lead.phone_raw or not lead.phone_raw.strip():
+        lead.zalo_invite_status = StepStatus.missing_phone.value
+        lead.zalo_message_status = StepStatus.missing_phone.value
+        return
+    lead.zalo_invite_status = StepStatus.pending.value
+    enqueue_task(db, lead.id, TaskType.zalo_invite)
+
+
+def _delivery_key(lead: Lead) -> str:
+    recipient = zalo_adapter.recipient_phone(lead) or (lead.phone_raw or "").strip()
+    captured_at = lead.captured_at.isoformat() if lead.captured_at else "unknown"
+    digest = sha256(
+        f"{lead.profile_key}|{captured_at}|{recipient}".encode("utf-8")
+    ).hexdigest()[:24]
+    return f"delivery:{digest}"
 
 
 if __name__ == "__main__":

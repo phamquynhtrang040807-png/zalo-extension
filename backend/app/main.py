@@ -188,7 +188,6 @@ def capture(payload: CaptureRequest, db: Session = Depends(get_db)) -> CaptureRe
     username = normalize_username(payload.username)
     profile_key = f"id:{payload.profile_id}" if payload.profile_id else f"username:{username}"
     lead = db.scalar(select(Lead).where(Lead.profile_key == profile_key))
-    is_new = lead is None
     if lead is None:
         lead = Lead(
             profile_key=profile_key,
@@ -228,33 +227,24 @@ def capture(payload: CaptureRequest, db: Session = Depends(get_db)) -> CaptureRe
             action="saved_missing_phone",
             lead_id=lead.id,
             job_id=lead.id,
-            message="Đã lưu hồ sơ đủ GMV nhưng thiếu SĐT hợp lệ",
+            message="Đã lưu hồ sơ nhưng trường SĐT đang trống",
             normalized=normalized,
         )
 
-    already_completed = (
-        lead.zalo_invite_status == StepStatus.completed.value
-        and lead.zalo_message_status == StepStatus.completed.value
-    )
+    # Each non-empty phone captured into Sheets starts a fresh Zalo delivery.
+    # The worker queues it only after the Sheet append succeeds.
+    lead.zalo_invite_status = StepStatus.not_queued.value
+    lead.zalo_message_status = StepStatus.not_queued.value
+    lead.zalo_invite_external_id = None
+    lead.zalo_message_external_id = None
     enqueue_task(db, lead.id, TaskType.sheet_sync)
-    if not already_completed:
-        if lead.zalo_invite_status != StepStatus.completed.value:
-            lead.zalo_invite_status = StepStatus.pending.value
-            enqueue_task(db, lead.id, TaskType.zalo_invite)
-        elif lead.zalo_message_status != StepStatus.completed.value:
-            lead.zalo_message_status = StepStatus.pending.value
-            enqueue_task(db, lead.id, TaskType.zalo_message)
     db.commit()
 
     return CaptureResponse(
-        action="duplicate_completed" if already_completed and not is_new else "queued",
+        action="queued",
         lead_id=lead.id,
         job_id=lead.id,
-        message=(
-            "Đã cập nhật dữ liệu; Zalo đã hoàn tất trước đó nên không gửi lại"
-            if already_completed
-            else "Đã đưa hồ sơ vào hàng đợi xử lý"
-        ),
+        message="Đã đưa hồ sơ vào hàng đợi; Zalo sẽ gửi sau khi append Sheet thành công",
         normalized=normalized,
     )
 
@@ -334,9 +324,8 @@ def test_zalo_automation(
     if is_zalo_paused(db):
         raise HTTPException(status_code=409, detail="Zalo đang tạm dừng; hãy bật lại trước khi gửi thử")
 
-    phone = normalize_vietnam_phone(payload.phone)
-    if not phone:
-        raise HTTPException(status_code=400, detail="Số điện thoại Việt Nam không hợp lệ")
+    raw_phone = payload.phone.strip()
+    phone = normalize_vietnam_phone(raw_phone)
 
     config = get_zalo_automation_config(
         db,
@@ -350,9 +339,9 @@ def test_zalo_automation(
         profile_key=f"test:{uuid.uuid4()}",
         username="zalo_test",
         display_name="Kiểm tra Zalo",
-        phone_raw=payload.phone,
-        phone_local=phone.local,
-        phone_e164=phone.e164,
+        phone_raw=raw_phone,
+        phone_local=phone.local if phone else None,
+        phone_e164=phone.e164 if phone else None,
         gmv_vnd=0,
     )
     effective_recipient = adapter.recipient_phone(lead)

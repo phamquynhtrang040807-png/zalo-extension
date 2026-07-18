@@ -397,11 +397,9 @@
       if (!response.ok || !response.data) throw new Error(response.error || "Backend kh\xF4ng ph\u1EA3n h\u1ED3i");
       const labels = {
         queued: "\u2713 \u0110\xE3 \u0111\u01B0a v\xE0o h\xE0ng \u0111\u1EE3i",
-        saved_missing_phone: "\u26A0 \u0110\xE3 l\u01B0u \u2014 thi\u1EBFu S\u0110T",
-        duplicate_completed: "\u2713 \u0110\xE3 c\u1EADp nh\u1EADt \u2014 kh\xF4ng g\u1EEDi l\u1EA1i",
-        skipped_gmv: "B\u1ECF qua \u2014 GMV d\u01B0\u1EDBi 50 tri\u1EC7u"
+        saved_missing_phone: "\u26A0 \u0110\xE3 l\u01B0u \u2014 thi\u1EBFu S\u0110T"
       };
-      setState(button, labels[response.data.action], response.data.action === "skipped_gmv" ? "warning" : "success");
+      setState(button, labels[response.data.action], "success");
     } catch (error) {
       setState(button, `L\u1ED7i: ${error instanceof Error ? error.message : String(error)}`, "error");
     }

@@ -12,7 +12,7 @@ export interface CapturePayload {
 }
 
 export interface CaptureResult {
-  action: "skipped_gmv" | "saved_missing_phone" | "queued" | "duplicate_completed";
+  action: "saved_missing_phone" | "queued";
   lead_id?: string;
   job_id?: string;
   message: string;

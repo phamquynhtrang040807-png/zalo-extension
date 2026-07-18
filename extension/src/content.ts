@@ -51,11 +51,9 @@ async function capture(button: HTMLButtonElement): Promise<void> {
     if (!response.ok || !response.data) throw new Error(response.error || "Backend không phản hồi");
     const labels: Record<CaptureResult["action"], string> = {
       queued: "✓ Đã đưa vào hàng đợi",
-      saved_missing_phone: "⚠ Đã lưu — thiếu SĐT",
-      duplicate_completed: "✓ Đã cập nhật — không gửi lại",
-      skipped_gmv: "Bỏ qua — GMV dưới 50 triệu"
+      saved_missing_phone: "⚠ Đã lưu — thiếu SĐT"
     };
-    setState(button, labels[response.data.action], response.data.action === "skipped_gmv" ? "warning" : "success");
+    setState(button, labels[response.data.action], "success");
   } catch (error) {
     setState(button, `Lỗi: ${error instanceof Error ? error.message : String(error)}`, "error");
   }
