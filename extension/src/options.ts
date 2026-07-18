@@ -18,8 +18,8 @@ const testZaloAutomationButton = document.querySelector<HTMLButtonElement>("#tes
 let zaloPollTimer: number | undefined;
 
 const DEFAULT_AUTOMATION: ZaloAutomationConfig = {
-  friend_request_message: "Xin chào, mình muốn kết bạn với bạn.",
-  messages: ["Chào {username}, mình muốn kết nối và trao đổi thêm với bạn."]
+  friend_request_message: "Chào bạn, mình là Trang Phạm, đến từ JUSTDUN - brand chuyên về thời trang nữ",
+  messages: ["Chào bạn, mình là Trang Phạm, đến từ JUSTDUN - brand chuyên về thời trang nữ"]
 };
 
 void load();
@@ -37,7 +37,7 @@ document.querySelector("#resume")!.addEventListener("click", () => request({ typ
 
 async function load(): Promise<void> {
   const stored = (await chrome.storage.local.get({
-    backendUrl: "http://localhost:8001",
+    backendUrl: "https://kol.aipencil.name.vn",
     apiToken: "change-me-to-a-long-random-token"
   })) as ExtensionConfig;
   if (stored.backendUrl === "http://localhost:8000") {
