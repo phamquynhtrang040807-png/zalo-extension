@@ -91,7 +91,7 @@ ZALO_ENABLED=true
 DRY_RUN=false
 ZALO_BASE_URL=http://zalo-bridge:3005
 ZALO_TOKEN=chuoi-bi-mat-dai
-ZALO_FORCE_RECIPIENT_ENABLED=true
+ZALO_FORCE_RECIPIENT_ENABLED=false
 ZALO_FORCE_RECIPIENT_PHONE=0961382006
 ZALO_FRIEND_REQUEST_MESSAGE=Xin chào, mình muốn kết bạn với bạn.
 ZALO_MESSAGE_TEMPLATE=Chào {username}, mình muốn trao đổi với bạn về cơ hội hợp tác.
@@ -101,7 +101,7 @@ Sau khi chạy `docker compose up --build -d`, reload Extension tại `chrome://
 
 Khối **Automation kết bạn và nhắn tin** cho phép sửa lời nhắn kết bạn, thêm/xóa tối đa 20 tin nhắn tự động, hoặc xóa hết tin nhắn để chỉ gửi lời mời. Cấu hình được lưu ở backend và áp dụng cho các job Zalo chưa hoàn tất. Các biến template: `{username}`, `{display_name}`, `{followers}`, `{gmv}`. Có thể tạm dừng ngay từ trang Options; worker giữ task trong hàng đợi và không tính lần retry khi đang tạm dừng. Mỗi tin nhắn có `idempotency_key` riêng để retry không gửi trùng.
 
-Trong khi `ZALO_FORCE_RECIPIENT_ENABLED=true`, cả backend và bridge đều ép lời mời kết bạn/tin nhắn tới `ZALO_FORCE_RECIPIENT_PHONE`; số của lead không được dùng. Nếu số test cấu hình sai, hệ thống từ chối gửi. Khi kiểm thử xong, đổi `ZALO_FORCE_RECIPIENT_ENABLED=false` rồi chạy `docker compose up -d --force-recreate worker zalo-bridge` để trở về luồng bình thường.
+Với `ZALO_FORCE_RECIPIENT_ENABLED=false`, backend và bridge dùng số điện thoại đã chuẩn hóa từ từng KOL để gửi lời mời kết bạn và các tin nhắn đã cấu hình. Chỉ bật lại biến này khi cần ép toàn bộ thao tác về một số kiểm thử duy nhất.
 
 `zca-js` sử dụng giao thức tài khoản cá nhân không chính thức; thay đổi phía Zalo có thể làm phiên hết hạn hoặc API ngừng hoạt động, và tự động hóa có thể ảnh hưởng tài khoản. Giữ tốc độ gửi thấp và chỉ liên hệ người đã đồng ý nhận tin.
 

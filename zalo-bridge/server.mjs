@@ -14,7 +14,7 @@ const IDEMPOTENCY_PATH = path.join(DATA_DIR, "idempotency.json");
 const BRIDGE_TOKEN = process.env.ZALO_BRIDGE_TOKEN || "";
 const FORCE_RECIPIENT_ENABLED = parseBoolean(
     process.env.ZALO_FORCE_RECIPIENT_ENABLED,
-    true,
+    false,
 );
 const FORCE_RECIPIENT_PHONE = process.env.ZALO_FORCE_RECIPIENT_PHONE || "0961382006";
 const FRIEND_REQUEST_MESSAGE =

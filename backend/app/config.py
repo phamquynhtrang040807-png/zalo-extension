@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     zalo_rate_limit_per_minute: int = Field(default=20, ge=1, le=600)
     # Safety guard: while enabled, every Zalo action is redirected to this number.
     # Set ZALO_FORCE_RECIPIENT_ENABLED=false to restore each lead's own number.
-    zalo_force_recipient_enabled: bool = True
+    zalo_force_recipient_enabled: bool = False
     zalo_force_recipient_phone: str = "0961382006"
     zalo_friend_request_message: str = "Xin chào, mình muốn kết bạn với bạn."
     zalo_message_template: str = (
