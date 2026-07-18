@@ -93,7 +93,7 @@ ZALO_BASE_URL=http://zalo-bridge:3005
 ZALO_TOKEN=chuoi-bi-mat-dai
 ZALO_FORCE_RECIPIENT_ENABLED=false
 ZALO_FORCE_RECIPIENT_PHONE=0961382006
-ZALO_FRIEND_REQUEST_MESSAGE=Xin chào, mình muốn kết bạn với bạn.
+ZALO_FRIEND_REQUEST_MESSAGE=Chào bạn, mình là Trang Phạm, đến từ JUSTDUN - brand chuyên về thời trang nữ
 ZALO_MESSAGE_TEMPLATE=Chào {username}, mình muốn trao đổi với bạn về cơ hội hợp tác.
 ```
 

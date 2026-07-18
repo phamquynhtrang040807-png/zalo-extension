@@ -18,7 +18,7 @@ const FORCE_RECIPIENT_ENABLED = parseBoolean(
 );
 const FORCE_RECIPIENT_PHONE = process.env.ZALO_FORCE_RECIPIENT_PHONE || "0961382006";
 const FRIEND_REQUEST_MESSAGE =
-    process.env.ZALO_FRIEND_REQUEST_MESSAGE || "Xin chào, mình muốn kết bạn với bạn.";
+    process.env.ZALO_FRIEND_REQUEST_MESSAGE || "Chào bạn, mình là Trang Phạm, đến từ JUSTDUN - brand chuyên về thời trang nữ";
 
 let api = null;
 let account = null;

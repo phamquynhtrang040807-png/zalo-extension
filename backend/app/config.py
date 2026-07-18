@@ -45,9 +45,9 @@ class Settings(BaseSettings):
     # Set ZALO_FORCE_RECIPIENT_ENABLED=false to restore each lead's own number.
     zalo_force_recipient_enabled: bool = False
     zalo_force_recipient_phone: str = "0961382006"
-    zalo_friend_request_message: str = "Xin chào, mình muốn kết bạn với bạn."
+    zalo_friend_request_message: str = "Chào bạn, mình là Trang Phạm, đến từ JUSTDUN - brand chuyên về thời trang nữ"
     zalo_message_template: str = (
-        "Chào {username}, mình muốn kết nối và trao đổi thêm với bạn."
+        "Chào bạn, mình là Trang Phạm, đến từ JUSTDUN - brand chuyên về thời trang nữ"
     )
 
     worker_poll_seconds: float = Field(default=1.0, ge=0.1, le=60)
