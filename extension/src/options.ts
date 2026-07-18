@@ -11,14 +11,13 @@ const apiToken = document.querySelector<HTMLInputElement>("#apiToken")!;
 const statusBox = document.querySelector<HTMLElement>("#status")!;
 const zaloLoginStatus = document.querySelector<HTMLElement>("#zaloLoginStatus")!;
 const zaloQr = document.querySelector<HTMLImageElement>("#zaloQr")!;
-const friendRequestMessage = document.querySelector<HTMLTextAreaElement>("#friendRequestMessage")!;
 const zaloMessages = document.querySelector<HTMLElement>("#zaloMessages")!;
 const zaloTestPhone = document.querySelector<HTMLInputElement>("#zaloTestPhone")!;
 const testZaloAutomationButton = document.querySelector<HTMLButtonElement>("#testZaloAutomation")!;
 let zaloPollTimer: number | undefined;
 
 const DEFAULT_AUTOMATION: ZaloAutomationConfig = {
-  friend_request_message: "Chào bạn, mình là Trang Phạm, đến từ JUSTDUN - brand chuyên về thời trang nữ",
+  friend_request_message: "Không sử dụng lời mời kết bạn",
   messages: ["Chào bạn, mình là Trang Phạm, đến từ JUSTDUN - brand chuyên về thời trang nữ"]
 };
 
@@ -80,7 +79,6 @@ async function loadAutomationConfig(): Promise<void> {
 }
 
 function renderAutomationConfig(config: ZaloAutomationConfig): void {
-  friendRequestMessage.value = config.friend_request_message;
   zaloMessages.replaceChildren();
   for (const message of config.messages) addMessageRow(message);
 }
@@ -106,12 +104,6 @@ function addMessageRow(value: string): void {
 }
 
 function readAutomationConfig(): ZaloAutomationConfig | null {
-  const invitation = friendRequestMessage.value.trim();
-  if (!invitation) {
-    statusBox.textContent = "Lời nhắn kết bạn không được để trống.";
-    friendRequestMessage.focus();
-    return null;
-  }
   const textareas = Array.from(zaloMessages.querySelectorAll<HTMLTextAreaElement>("textarea"));
   const messages = textareas.map((textarea) => textarea.value.trim());
   const emptyIndex = messages.findIndex((message) => !message);
@@ -120,7 +112,7 @@ function readAutomationConfig(): ZaloAutomationConfig | null {
     textareas[emptyIndex].focus();
     return null;
   }
-  return { friend_request_message: invitation, messages };
+  return { friend_request_message: DEFAULT_AUTOMATION.friend_request_message, messages };
 }
 
 async function testZaloAutomation(): Promise<void> {

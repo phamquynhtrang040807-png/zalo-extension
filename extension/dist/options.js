@@ -6,14 +6,13 @@
   var statusBox = document.querySelector("#status");
   var zaloLoginStatus = document.querySelector("#zaloLoginStatus");
   var zaloQr = document.querySelector("#zaloQr");
-  var friendRequestMessage = document.querySelector("#friendRequestMessage");
   var zaloMessages = document.querySelector("#zaloMessages");
   var zaloTestPhone = document.querySelector("#zaloTestPhone");
   var testZaloAutomationButton = document.querySelector("#testZaloAutomation");
   var zaloPollTimer;
   var DEFAULT_AUTOMATION = {
-    friend_request_message: "Xin ch\xE0o, m\xECnh mu\u1ED1n k\u1EBFt b\u1EA1n v\u1EDBi b\u1EA1n.",
-    messages: ["Ch\xE0o {username}, m\xECnh mu\u1ED1n k\u1EBFt n\u1ED1i v\xE0 trao \u0111\u1ED5i th\xEAm v\u1EDBi b\u1EA1n."]
+    friend_request_message: "Kh\xF4ng s\u1EED d\u1EE5ng l\u1EDDi m\u1EDDi k\u1EBFt b\u1EA1n",
+    messages: ["Ch\xE0o b\u1EA1n, m\xECnh l\xE0 Trang Ph\u1EA1m, \u0111\u1EBFn t\u1EEB JUSTDUN - brand chuy\xEAn v\u1EC1 th\u1EDDi trang n\u1EEF"]
   };
   void load();
   document.querySelector("#save").addEventListener("click", save);
@@ -28,7 +27,7 @@
   document.querySelector("#resume").addEventListener("click", () => request({ type: "zalo-control", enabled: true }));
   async function load() {
     const stored = await chrome.storage.local.get({
-      backendUrl: "http://localhost:8001",
+      backendUrl: "https://kol.aipencil.name.vn",
       apiToken: "change-me-to-a-long-random-token"
     });
     if (stored.backendUrl === "http://localhost:8000") {
@@ -68,7 +67,6 @@
     }
   }
   function renderAutomationConfig(config) {
-    friendRequestMessage.value = config.friend_request_message;
     zaloMessages.replaceChildren();
     for (const message of config.messages) addMessageRow(message);
   }
@@ -92,12 +90,6 @@
     zaloMessages.append(row);
   }
   function readAutomationConfig() {
-    const invitation = friendRequestMessage.value.trim();
-    if (!invitation) {
-      statusBox.textContent = "L\u1EDDi nh\u1EAFn k\u1EBFt b\u1EA1n kh\xF4ng \u0111\u01B0\u1EE3c \u0111\u1EC3 tr\u1ED1ng.";
-      friendRequestMessage.focus();
-      return null;
-    }
     const textareas = Array.from(zaloMessages.querySelectorAll("textarea"));
     const messages = textareas.map((textarea) => textarea.value.trim());
     const emptyIndex = messages.findIndex((message) => !message);
@@ -106,7 +98,7 @@
       textareas[emptyIndex].focus();
       return null;
     }
-    return { friend_request_message: invitation, messages };
+    return { friend_request_message: DEFAULT_AUTOMATION.friend_request_message, messages };
   }
   async function testZaloAutomation() {
     const phone = zaloTestPhone.value.trim();

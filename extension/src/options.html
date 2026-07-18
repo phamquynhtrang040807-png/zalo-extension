@@ -37,15 +37,12 @@
       <p>Quét QR bằng ứng dụng Zalo trên điện thoại rồi xác nhận đăng nhập.</p>
     </section>
     <section class="zalo-card">
-      <h2>Automation kết bạn và nhắn tin</h2>
+      <h2>Automation nhắn tin trực tiếp</h2>
       <p class="hint">Áp dụng cho các job Zalo chưa hoàn tất. Hỗ trợ: {username}, {display_name}, {followers}, {gmv}.</p>
-      <label>Lời nhắn kết bạn
-        <textarea id="friendRequestMessage" maxlength="500"></textarea>
-      </label>
-      <label>Tin nhắn tự động sau lời mời kết bạn</label>
+      <label>Tin nhắn tự động</label>
       <div id="zaloMessages"></div>
       <button id="addZaloMessage" class="secondary">+ Thêm tin nhắn</button>
-      <p class="hint">Có thể xóa toàn bộ để chỉ gửi lời mời kết bạn. Tối đa 20 tin nhắn, mỗi tin tối đa 5000 ký tự.</p>
+      <p class="hint">Gửi trực tiếp, không gửi lời mời kết bạn. Tối đa 20 tin nhắn, mỗi tin tối đa 5000 ký tự.</p>
       <div class="test-row">
         <label>Số điện thoại nhận tin nhắn thử
           <input id="zaloTestPhone" type="tel" inputmode="tel" placeholder="0912345678" maxlength="30">

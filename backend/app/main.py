@@ -217,8 +217,7 @@ def capture(payload: CaptureRequest, db: Session = Depends(get_db)) -> CaptureRe
     lead.sheet_status = StepStatus.pending.value
 
     if not has_zalo_value:
-        if lead.zalo_invite_status != StepStatus.completed.value:
-            lead.zalo_invite_status = StepStatus.missing_phone.value
+        lead.zalo_invite_status = StepStatus.disabled.value
         if lead.zalo_message_status != StepStatus.completed.value:
             lead.zalo_message_status = StepStatus.missing_phone.value
         enqueue_task(db, lead.id, TaskType.sheet_sync)
@@ -233,7 +232,7 @@ def capture(payload: CaptureRequest, db: Session = Depends(get_db)) -> CaptureRe
 
     # Each non-empty phone captured into Sheets starts a fresh Zalo delivery.
     # The worker queues it only after the Sheet append succeeds.
-    lead.zalo_invite_status = StepStatus.not_queued.value
+    lead.zalo_invite_status = StepStatus.disabled.value
     lead.zalo_message_status = StepStatus.not_queued.value
     lead.zalo_invite_external_id = None
     lead.zalo_message_external_id = None

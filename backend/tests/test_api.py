@@ -86,7 +86,7 @@ def test_queues_eligible_lead_and_exposes_job():
         job = test_client.get(f"/v1/jobs/{body['job_id']}", headers=auth_headers())
     assert job.status_code == 200
     assert job.json()["sheet_status"] == "pending"
-    assert job.json()["zalo_invite_status"] == "not_queued"
+    assert job.json()["zalo_invite_status"] == "disabled"
 
 
 def test_saves_missing_phone():

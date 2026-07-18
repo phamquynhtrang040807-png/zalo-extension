@@ -35,7 +35,7 @@ def run_forever() -> None:
             if not task:
                 time.sleep(settings.worker_poll_seconds)
                 continue
-            if task.task_type in (TaskType.zalo_invite.value, TaskType.zalo_message.value):
+            if task.task_type == TaskType.zalo_message.value:
                 elapsed = time.monotonic() - last_zalo_call
                 if elapsed < minimum_zalo_interval:
                     time.sleep(minimum_zalo_interval - elapsed)
@@ -98,11 +98,16 @@ def process_task(db: Session, task: OutboxTask) -> None:
             task.status = TaskStatus.completed.value
             task.last_error = None
             if result.row is not None and lead.phone_raw and lead.phone_raw.strip():
-                _ensure_invite_task(db, lead)
+                lead.zalo_invite_status = StepStatus.disabled.value
+                _ensure_message_task(db, lead)
         elif task.task_type == TaskType.zalo_invite.value:
-            _process_zalo(db, task, lead, invite=True)
+            # Skip invitation tasks left by older builds and send messages directly.
+            task.status = TaskStatus.completed.value
+            task.last_error = None
+            lead.zalo_invite_status = StepStatus.disabled.value
+            _ensure_message_task(db, lead)
         elif task.task_type == TaskType.zalo_message.value:
-            _process_zalo(db, task, lead, invite=False)
+            _process_zalo_message(db, task, lead)
         else:
             raise RuntimeError(f"Unknown task type: {task.task_type}")
         db.commit()
@@ -111,34 +116,20 @@ def process_task(db: Session, task: OutboxTask) -> None:
         _retry_or_fail(db, task, lead, str(exc), retryable=True)
 
 
-def _process_zalo(db: Session, task: OutboxTask, lead: Lead, invite: bool) -> None:
+def _process_zalo_message(db: Session, task: OutboxTask, lead: Lead) -> None:
     if is_zalo_paused(db):
         task.status = TaskStatus.pending.value
         task.available_at = datetime.now(timezone.utc) + timedelta(seconds=30)
         task.attempts = max(0, task.attempts - 1)
         return
 
-    if invite and lead.zalo_invite_status == StepStatus.completed.value:
-        task.status = TaskStatus.completed.value
-        _ensure_message_task(db, lead)
-        return
-    if not invite and lead.zalo_message_status == StepStatus.completed.value:
+    if lead.zalo_message_status == StepStatus.completed.value:
         task.status = TaskStatus.completed.value
         return
 
-    if invite:
-        lead.zalo_invite_status = StepStatus.processing.value
-        config = _automation_config(db)
-        delivery_key = _delivery_key(lead)
-        result = zalo_adapter.send_friend_request(
-            lead,
-            f"{delivery_key}:invite",
-            str(config["friend_request_message"]),
-        )
-    else:
-        lead.zalo_message_status = StepStatus.processing.value
-        result = _send_configured_messages(db, lead)
-    _apply_zalo_result(db, task, lead, result, invite)
+    lead.zalo_message_status = StepStatus.processing.value
+    result = _send_configured_messages(db, lead)
+    _apply_zalo_message_result(db, task, lead, result)
 
 
 def _automation_config(db: Session) -> dict[str, object]:
@@ -175,27 +166,19 @@ def _send_configured_messages(db: Session, lead: Lead) -> ZaloResult:
     )
 
 
-def _apply_zalo_result(
-    db: Session, task: OutboxTask, lead: Lead, result: ZaloResult, invite: bool
+def _apply_zalo_message_result(
+    db: Session, task: OutboxTask, lead: Lead, result: ZaloResult
 ) -> None:
     if result.success:
         task.status = TaskStatus.completed.value
         task.last_error = None
         lead.last_error = None
-        if invite:
-            lead.zalo_invite_status = StepStatus.completed.value
-            lead.zalo_invite_external_id = result.external_id
-            _ensure_message_task(db, lead)
-        else:
-            lead.zalo_message_status = StepStatus.completed.value
-            lead.zalo_message_external_id = result.external_id
+        lead.zalo_message_status = StepStatus.completed.value
+        lead.zalo_message_external_id = result.external_id
         return
 
     error = ": ".join(part for part in (result.error_code, result.error_message) if part)
     _retry_or_fail(db, task, lead, error or "Unknown Zalo error", result.retryable)
-    if task.status == TaskStatus.failed.value and invite:
-        # The message is attempted even when the invitation is permanently rejected.
-        _ensure_message_task(db, lead)
 
 
 def _retry_or_fail(
@@ -233,15 +216,6 @@ def _ensure_message_task(db: Session, lead: Lead) -> None:
     if lead.zalo_message_status != StepStatus.completed.value:
         lead.zalo_message_status = StepStatus.pending.value
         enqueue_task(db, lead.id, TaskType.zalo_message)
-
-
-def _ensure_invite_task(db: Session, lead: Lead) -> None:
-    if not lead.phone_raw or not lead.phone_raw.strip():
-        lead.zalo_invite_status = StepStatus.missing_phone.value
-        lead.zalo_message_status = StepStatus.missing_phone.value
-        return
-    lead.zalo_invite_status = StepStatus.pending.value
-    enqueue_task(db, lead.id, TaskType.zalo_invite)
 
 
 def _delivery_key(lead: Lead) -> str:
