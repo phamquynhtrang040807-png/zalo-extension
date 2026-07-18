@@ -18,6 +18,22 @@ def auth_headers():
     return {"Authorization": f"Bearer {get_settings().api_token}"}
 
 
+def test_allows_extension_cors_preflight():
+    origin = "chrome-extension://bgcapdkjgejpoemllfcnhjgokomlflnh"
+    with TestClient(app) as test_client:
+        response = test_client.options(
+            "/v1/config/zalo-automation",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "PUT",
+                "Access-Control-Request-Headers": "authorization,content-type",
+            },
+        )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
+    assert "PUT" in response.headers["access-control-allow-methods"]
+
+
 def payload(**overrides):
     data = {
         "source": "tiktok_shop",

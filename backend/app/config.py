@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     )
 
     api_token: str = "change-me-to-a-long-random-token"
+    cors_allow_origins: str = (
+        "chrome-extension://bgcapdkjgejpoemllfcnhjgokomlflnh"
+    )
     database_url: str = "sqlite:///./data/auto_zalo.db"
     google_sheets_enabled: bool = False
     google_spreadsheet_id: str = ""

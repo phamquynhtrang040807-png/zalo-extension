@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "TikTok Shop → Sheets & Zalo",
   "version": "0.1.0",
-  "description": "Thu thập hồ sơ nhà sáng tạo TikTok Shop và chuyển tới Auto Zalo backend.",
+  "description": "Thu thập hồ sơ nhà sáng tạo TikTok Shop và nhắn tin tự động.",
   "permissions": ["storage"],
   "host_permissions": [
     "http://localhost:8001/*",
@@ -26,7 +26,7 @@
   ],
   "options_page": "options.html",
   "action": {
-    "default_title": "Cấu hình Auto Zalo"
+    "default_title": "KOL Zalo tự động"
   }
 }
 

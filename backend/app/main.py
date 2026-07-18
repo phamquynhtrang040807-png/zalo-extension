@@ -4,6 +4,7 @@ import time
 import uuid
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -55,6 +56,18 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Auto Zalo API", version="0.1.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        origin.strip()
+        for origin in settings.cors_allow_origins.split(",")
+        if origin.strip()
+    ],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    max_age=86400,
+)
 
 
 @app.get("/health")
