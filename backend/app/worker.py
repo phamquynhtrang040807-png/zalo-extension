@@ -97,9 +97,6 @@ def process_task(db: Session, task: OutboxTask) -> None:
             lead.sheet_status = StepStatus.completed.value
             task.status = TaskStatus.completed.value
             task.last_error = None
-            if result.row is not None and lead.phone_raw and lead.phone_raw.strip():
-                lead.zalo_invite_status = StepStatus.disabled.value
-                _ensure_message_task(db, lead)
         elif task.task_type == TaskType.zalo_invite.value:
             # Skip invitation tasks left by older builds and send messages directly.
             task.status = TaskStatus.completed.value

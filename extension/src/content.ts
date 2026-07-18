@@ -50,7 +50,7 @@ async function capture(button: HTMLButtonElement): Promise<void> {
     })) as RuntimeResponse<CaptureResult>;
     if (!response.ok || !response.data) throw new Error(response.error || "Backend không phản hồi");
     const labels: Record<CaptureResult["action"], string> = {
-      queued: "✓ Đã đưa vào hàng đợi",
+      sent: "✓ Đã gửi Zalo trực tiếp",
       saved_missing_phone: "⚠ Đã lưu — thiếu SĐT"
     };
     setState(button, labels[response.data.action], "success");

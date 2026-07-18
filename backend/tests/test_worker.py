@@ -46,7 +46,7 @@ def test_worker_sends_every_configured_message_with_its_own_idempotency_key(monk
     assert calls[0][0] != calls[1][0]
 
 
-def test_sheet_append_queues_zalo_message_without_invitation(monkeypatch):
+def test_sheet_append_does_not_queue_zalo_delivery(monkeypatch):
     class FakeSheetAdapter:
         def insert_lead(self, lead):
             return SimpleNamespace(row=42)
@@ -64,7 +64,7 @@ def test_sheet_append_queues_zalo_message_without_invitation(monkeypatch):
             phone_raw="zalo-id_creator",
             captured_at=datetime.now(timezone.utc),
             sheet_status=StepStatus.pending.value,
-            zalo_invite_status=StepStatus.not_queued.value,
+            zalo_invite_status=StepStatus.disabled.value,
             zalo_message_status=StepStatus.not_queued.value,
         )
         db.add(lead)
@@ -100,5 +100,5 @@ def test_sheet_append_queues_zalo_message_without_invitation(monkeypatch):
     assert lead.sheet_row == 42
     assert lead.zalo_invite_status == StepStatus.disabled.value
     assert invite_count == 0
-    assert lead.zalo_message_status == StepStatus.pending.value
-    assert message_count == 1
+    assert lead.zalo_message_status == StepStatus.not_queued.value
+    assert message_count == 0

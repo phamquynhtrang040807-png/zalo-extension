@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from hashlib import sha256
 from html import escape
 import time
 import uuid
@@ -230,20 +231,47 @@ def capture(payload: CaptureRequest, db: Session = Depends(get_db)) -> CaptureRe
             normalized=normalized,
         )
 
-    # Each non-empty phone captured into Sheets starts a fresh Zalo delivery.
-    # The worker queues it only after the Sheet append succeeds.
+    # Sheet sync remains durable, while Zalo uses the same synchronous path as
+    # the manual test action so it does not depend on a separate worker.
     lead.zalo_invite_status = StepStatus.disabled.value
-    lead.zalo_message_status = StepStatus.not_queued.value
+    lead.zalo_message_status = StepStatus.processing.value
     lead.zalo_invite_external_id = None
     lead.zalo_message_external_id = None
     enqueue_task(db, lead.id, TaskType.sheet_sync)
     db.commit()
 
+    if is_zalo_paused(db):
+        lead.zalo_message_status = StepStatus.failed.value
+        lead.last_error = "Zalo đang tạm dừng"
+        db.commit()
+        raise HTTPException(status_code=409, detail=lead.last_error)
+
+    recipient = lead.phone_e164 or (lead.phone_raw or "").strip()
+    delivery_digest = sha256(
+        f"{lead.profile_key}|{lead.captured_at.isoformat()}|{recipient}".encode("utf-8")
+    ).hexdigest()[:24]
+    try:
+        effective_recipient, message_ids = _send_direct_messages(
+            db,
+            lead,
+            f"capture:{delivery_digest}",
+        )
+    except HTTPException as exc:
+        lead.zalo_message_status = StepStatus.failed.value
+        lead.last_error = str(exc.detail)
+        db.commit()
+        raise
+
+    lead.zalo_message_status = StepStatus.completed.value
+    lead.zalo_message_external_id = ",".join(message_ids) or None
+    lead.last_error = None
+    db.commit()
+
     return CaptureResponse(
-        action="queued",
+        action="sent",
         lead_id=lead.id,
         job_id=lead.id,
-        message="Đã đưa hồ sơ vào hàng đợi; Zalo sẽ gửi sau khi append Sheet thành công",
+        message=f"Đã gửi trực tiếp tới số …{effective_recipient[-4:]}; Sheet đang đồng bộ",
         normalized=normalized,
     )
 
@@ -326,13 +354,6 @@ def test_zalo_automation(
     raw_phone = payload.phone.strip()
     phone = normalize_vietnam_phone(raw_phone)
 
-    config = get_zalo_automation_config(
-        db,
-        settings.zalo_friend_request_message,
-        settings.zalo_message_template,
-    )
-    messages = list(config["messages"])
-    adapter = ZaloAdapter(settings)
     lead = Lead(
         id=f"test-{uuid.uuid4()}",
         profile_key=f"test:{uuid.uuid4()}",
@@ -343,31 +364,19 @@ def test_zalo_automation(
         phone_e164=phone.e164 if phone else None,
         gmv_vnd=0,
     )
-    effective_recipient = adapter.recipient_phone(lead)
-    if not effective_recipient:
-        raise HTTPException(status_code=400, detail="Không xác định được số điện thoại nhận")
-
-    message_ids: list[str] = []
     test_run_id = uuid.uuid4().hex
-    minimum_interval = 60.0 / settings.zalo_rate_limit_per_minute
-    for index, message_template in enumerate(messages):
-        result = adapter.send_message(
-            lead,
-            f"automation-test:{test_run_id}:{index}",
-            message_template,
-        )
-        if not result.success:
-            detail = ": ".join(
-                part for part in (result.error_code, result.error_message) if part
-            )
-            raise HTTPException(
-                status_code=502,
-                detail=f"Tin nhắn thử thứ {index + 1} thất bại: {detail or 'Lỗi Zalo không xác định'}",
-            )
-        if result.external_id:
-            message_ids.append(result.external_id)
-        if index < len(messages) - 1:
-            time.sleep(minimum_interval)
+    effective_recipient, message_ids = _send_direct_messages(
+        db,
+        lead,
+        f"automation-test:{test_run_id}",
+    )
+    messages = list(
+        get_zalo_automation_config(
+            db,
+            settings.zalo_friend_request_message,
+            settings.zalo_message_template,
+        )["messages"]
+    )
 
     return ZaloAutomationTestResponse(
         success=True,
@@ -382,6 +391,46 @@ def test_zalo_automation(
             else "Không có tin nhắn tự động nào để gửi thử"
         ),
     )
+
+
+def _send_direct_messages(
+    db: Session,
+    lead: Lead,
+    idempotency_prefix: str,
+) -> tuple[str, list[str]]:
+    config = get_zalo_automation_config(
+        db,
+        settings.zalo_friend_request_message,
+        settings.zalo_message_template,
+    )
+    messages = list(config["messages"])
+    adapter = ZaloAdapter(settings)
+    effective_recipient = adapter.recipient_phone(lead)
+    if not effective_recipient:
+        raise HTTPException(status_code=400, detail="Không xác định được số điện thoại nhận")
+
+    message_ids: list[str] = []
+    minimum_interval = 60.0 / settings.zalo_rate_limit_per_minute
+    for index, message_template in enumerate(messages):
+        template_digest = sha256(message_template.encode("utf-8")).hexdigest()[:16]
+        result = adapter.send_message(
+            lead,
+            f"{idempotency_prefix}:{index}:{template_digest}",
+            message_template,
+        )
+        if not result.success:
+            detail = ": ".join(
+                part for part in (result.error_code, result.error_message) if part
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=f"Tin nhắn thứ {index + 1} thất bại: {detail or 'Lỗi Zalo không xác định'}",
+            )
+        if result.external_id:
+            message_ids.append(result.external_id)
+        if index < len(messages) - 1:
+            time.sleep(minimum_interval)
+    return effective_recipient, message_ids
 
 
 def _personal_zalo_bridge() -> PersonalZaloBridge:

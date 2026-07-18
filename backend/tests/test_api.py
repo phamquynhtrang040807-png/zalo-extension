@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi.testclient import TestClient
+import pytest
 from sqlalchemy import func, select
 
 import app.main as main_module
@@ -12,6 +13,25 @@ from app.services.zalo import ZaloResult
 
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def fake_zalo_delivery(monkeypatch):
+    sent: list[tuple[str, str]] = []
+
+    class FakeZaloAdapter:
+        def __init__(self, settings):
+            self.settings = settings
+
+        def recipient_phone(self, lead):
+            return lead.phone_e164 or lead.phone_raw
+
+        def send_message(self, lead, idempotency_key, message_template=None):
+            sent.append((idempotency_key, message_template))
+            return ZaloResult(success=True, external_id=f"message-{len(sent)}")
+
+    monkeypatch.setattr(main_module, "ZaloAdapter", FakeZaloAdapter)
+    return sent
 
 
 def auth_headers():
@@ -73,20 +93,22 @@ def test_low_gmv_is_queued_without_a_threshold():
             "/v1/captures", json=payload(gmv_raw="49,9 Tr"), headers=auth_headers()
         )
     assert response.status_code == 200
-    assert response.json()["action"] == "queued"
+    assert response.json()["action"] == "sent"
     assert response.json()["lead_id"] is not None
 
 
-def test_queues_eligible_lead_and_exposes_job():
+def test_sends_eligible_lead_directly_and_exposes_job(fake_zalo_delivery):
     with TestClient(app) as test_client:
         response = test_client.post("/v1/captures", json=payload(), headers=auth_headers())
         assert response.status_code == 200
         body = response.json()
-        assert body["action"] == "queued"
+        assert body["action"] == "sent"
         job = test_client.get(f"/v1/jobs/{body['job_id']}", headers=auth_headers())
     assert job.status_code == 200
     assert job.json()["sheet_status"] == "pending"
     assert job.json()["zalo_invite_status"] == "disabled"
+    assert job.json()["zalo_message_status"] == "completed"
+    assert len(fake_zalo_delivery) >= 1
 
 
 def test_saves_missing_phone():
@@ -104,7 +126,7 @@ def test_keeps_non_standard_zalo_value():
             "/v1/captures", json=payload(phone_raw="zalo-id_creator"), headers=auth_headers()
         )
     assert response.status_code == 200
-    assert response.json()["action"] == "queued"
+    assert response.json()["action"] == "sent"
     assert response.json()["normalized"]["phone_local"] is None
 
 
